@@ -76,7 +76,7 @@
             top: 10px;
             right: 10px;
             display: flex;
-            flex-wrap: wrap;
+            flex-direction: column;
             gap: 10px;
             z-index: 1002;
         }
@@ -107,15 +107,16 @@
             z-index: 1001;
         }
         #fileInput {
-            margin-left: 10px;
+            margin-top: 10px;
             z-index: 1002;
         }
         #canvas {
             border: 1px solid black;
             position: absolute;
             top: 70px;
-            left: 10px;
+            right: 10px;
             z-index: 1002;
+            max-width: 300px; /* Limiting the size */
         }
         #cursorOverlay {
             position: absolute;
@@ -131,13 +132,13 @@
     </style>
 </head>
 <body>
-    <div id="info">Bewegen Sie die Maus, um die Koordinaten anzuzeigen.</div>
+    <div id="info">Bewege die Maus, um die Koordinaten anzuzeigen.</div>
     <div id="distanceInfo">Abstand zum nächstgelegenen Punkt: -</div>
     <div id="notification">Bitte aktivieren Sie den Festhaltemodus, um den Aufnahmemodus zu verwenden.</div>
     <div id="recordingStatus">Aufnahmemodus ist deaktiviert.</div>
     <div class="button-container">
         <button onclick="togglePointerLock()">Cursor festhalten / freigeben</button>
-        <button onclick="exportToExcel()">Daten exportieren</button>
+        <button id="exportButton" onclick="exportToExcel()">Daten exportieren</button>
         <button onclick="copyToClipboard()">In Zwischenablage kopieren</button>
         <input type="file" id="fileInput" accept="image/png" />
     </div>
@@ -166,6 +167,7 @@
         const recordingStatus = document.getElementById('recordingStatus');
         const canvas = document.getElementById('canvas');
         const cursorOverlay = document.getElementById('cursorOverlay');
+        const exportButton = document.getElementById('exportButton');
 
         function togglePointerLock() {
             if (!cursorLocked) {
@@ -182,8 +184,8 @@
         }
 
         function exportToExcel() {
-            if (!cursorLocked) {
-                console.log('Festhaltemodus muss aktiviert sein, um Daten zu exportieren.');
+            if (cursorLocked) {
+                console.log('Excel-Export ist nur außerhalb des Festhaltemodus möglich.');
                 return;
             }
             
@@ -228,30 +230,6 @@
             console.log('Mausdaten in die Zwischenablage kopiert.');
         }
 
-        function handleFileUpload(event) {
-            const file = event.target.files[0];
-            if (file && file.type === 'image/png') {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    const base64URL = e.target.result;
-                    
-                    const img = new Image();
-                    img.onload = function() {
-                        canvas.width = img.width;
-                        canvas.height = img.height;
-                        const ctx = canvas.getContext('2d');
-                        ctx.drawImage(img, 0, 0);
-                    };
-                    img.src = base64URL;
-                };
-                reader.readAsDataURL(file);
-            } else {
-                console.log('Bitte eine PNG-Datei hochladen.');
-            }
-        }
-
-        document.getElementById('fileInput').addEventListener('change', handleFileUpload);
-
         function toggleRecordingMode() {
             if (!cursorLocked) {
                 notification.innerHTML = 'Bitte aktivieren Sie zuerst den Festhaltemodus.';
@@ -274,21 +252,6 @@
             }
         }
 
-        document.addEventListener('pointerlockchange', () => {
-            cursorLocked = !!document.pointerLockElement;
-            if (cursorLocked) {
-                console.log('Pointer Lock aktiviert');
-                document.body.classList.add('hide-cursor');
-                document.addEventListener('mousemove', updatePosition, false);
-                document.addEventListener('keydown', handleKeydown, false);
-            } else {
-                console.log('Pointer Lock deaktiviert');
-                document.body.classList.remove('hide-cursor');
-                document.removeEventListener('mousemove', updatePosition, false);
-                document.removeEventListener('keydown', handleKeydown, false);
-            }
-        }, false);
-
         function updatePosition(event) {
             if (cursorLocked) {
                 const movementX = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
@@ -298,10 +261,13 @@
                 posY = Math.max(0, posY + movementY);
 
                 info.innerHTML = `Aktuelle Koordinaten: X=${posX}, Y=${posY}`;
+
                 if (recordingMode) {
                     referenceLine.push({X: posX, Y: posY});
                 }
-                distanceInfo.innerHTML = `Abstand zum nächstgelegenen Punkt: ${calculateClosestDistance({x: posX, y: posY}, userPoints).toFixed(2)} Pixel`;
+
+                const minDistance = recordingMode ? '-' : calculateClosestDistance({x: posX, y: posY}, userPoints).toFixed(2);
+                distanceInfo.innerHTML = `Abstand zum nächstgelegenen Punkt: ${minDistance} Pixel`;
 
                 cursorOverlay.style.top = `${posY}px`;
                 cursorOverlay.style.left = `${posX}px`;
@@ -335,8 +301,10 @@
                         recordingMode = false;
                         info.innerHTML = 'Aufnahmemodus deaktiviert. Beenden Sie den Aufnahmemodus, um die Daten zu exportieren.';
                     }
+                    // We only export data when not in recording mode or cursor locked
                     exportToExcel();
                 }
+                cursorOverlay.style.display = 'none'; // Hide cursor overlay on exit
             }
         }
 
@@ -366,6 +334,22 @@
             return minDistance;
         }
 
+        document.addEventListener('pointerlockchange', () => {
+            cursorLocked = !!document.pointerLockElement;
+            if (cursorLocked) {
+                console.log('Pointer Lock aktiviert');
+                document.body.classList.add('hide-cursor');
+                document.addEventListener('mousemove', updatePosition, false);
+                document.addEventListener('keydown', handleKeydown, false);
+            } else {
+                console.log('Pointer Lock deaktiviert');
+                document.body.classList.remove('hide-cursor');
+                document.removeEventListener('mousemove', updatePosition, false);
+                document.removeEventListener('keydown', handleKeydown, false);
+                cursorOverlay.style.display = 'none'; // Hide cursor overlay on exit
+            }
+        }, false);
+
         document.addEventListener('click', (event) => {
             if (!cursorLocked) {
                 const x = event.clientX;
@@ -375,20 +359,49 @@
                     const distance = calculateOrthogonalDistance({x, y}, referenceLine);
                     console.log(`Benutzerpunkt hinzugefügt: X=${x}, Y=${y}, Abstand zur Bezugslinie: ${distance.toFixed(2)}`);
                     info.innerHTML = `Punkt: X=${x}, Y=${y}, Abstand: ${distance.toFixed(2)}`;
+                    displayPointDistances();
                 } else {
                     console.log('Bezugslinie noch nicht festgelegt.');
                 }
             }
         });
 
-        document.addEventListener('mousemove', (event) => {
-            if (!cursorLocked) {
-                const x = event.clientX;
-                const y = event.clientY;
-                info.innerHTML = `Aktuelle Koordinaten: X=${x}, Y=${y}`;
-                console.log(`Mauskoordinaten: X=${x}, Y=${y}`);
+        function displayPointDistances() {
+            if (referenceLine.length > 1) {
+                const distances = userPoints.map(point => ({
+                    point: point,
+                    distance: calculateOrthogonalDistance(point, referenceLine).toFixed(2)
+                }));
+                let listHtml = '<strong>Abstände der Punkte zur Bezugslinie:</strong><br>';
+                distances.forEach(item => {
+                    listHtml += `Punkt: X=${item.point.x}, Y=${item.point.y}, Abstand: ${item.distance} Pixel<br>`;
+                });
+                distanceInfo.innerHTML = listHtml;
             }
-        });
+        }
+
+        document.getElementById('fileInput').addEventListener('change', handleFileUpload);
+
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (file && file.type === 'image/png') {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const base64URL = e.target.result;
+                    const img = new Image();
+                    img.onload = () => {
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0);
+                    };
+                    img.src = base64URL;
+                };
+                reader.readAsDataURL(file);
+            } else {
+                console.log('Bitte eine PNG-Datei hochladen.');
+            }
+        }
     </script>
 </body>
 </html>
