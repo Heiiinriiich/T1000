@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geradengleichung berechnen und messen</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+            margin: 0;
+        }
+        #canvas-container {
+            width: 500px;
+            height: 500px;
+            border: 1px solid black;
+            overflow: hidden;
+            position: relative;
+            cursor: none; /* Hide native cursor */
+        }
+        #canvas {
+            position: absolute;
+            left: 0;
+            top: 0;
+        }
+        #instructions {
+            margin-bottom: 20px;
+        }
+        .virtual-cursor {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: black;
+            border-radius: 50%;
+            pointer-events: none; /* Prevent virtual cursor from capturing mouse events */
+            display: block; /* Ensure the virtual cursor is visible */
+        }
+    </style>
+</head>
+<body>
+
+    <div id="instructions">Drücken Sie die Leertaste, um den Aufnahmemodus zu aktivieren/deaktivieren. Drücken Sie die Tab-Taste, um den Messmodus zu starten/beenden. Bewegen Sie die Maus in den Canvas, um den Aufnahmemodus zu aktivieren.</div>
+    <div id="canvas-container">
+        <canvas id="canvas" width="20000" height="20000"></canvas>
+        <div class="virtual-cursor" id="virtual-cursor"></div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const canvasContainer = document.getElementById('canvas-container');
+        const ctx = canvas.getContext('2d');
+        const virtualCursor = document.getElementById('virtual-cursor');
+        let points = [];
+        let recordingMode = false;
+        let measuringMode = false;
+        let equationCount = 0;
+        const equations = {};
+        const measurementPoints = [];
+        
+        let offsetX = canvas.width / 2 - canvasContainer.clientWidth / 2;
+        let offsetY = canvas.height / 2 - canvasContainer.clientHeight / 2;
+
+        function updateCanvasPosition() {
+            canvas.style.left = -offsetX + 'px';
+            canvas.style.top = -offsetY + 'px';
+        }
+
+        updateCanvasPosition();
+
+        document.addEventListener('keydown', (event) => {
+            if (event.code === 'Space') {
+                recordingMode = !recordingMode;
+                measuringMode = false; // Ensure measuring mode is off when recording mode is toggled
+                console.log(`Aufnahmemodus ${recordingMode ? 'aktiviert' : 'deaktiviert'}`);
+            } else if (event.code === 'Tab') {
+                event.preventDefault(); // Prevent default tab behavior
+                measuringMode = !measuringMode;
+                if (!measuringMode) {
+                    calculateDistances();
+                }
+                console.log(`Messmodus ${measuringMode ? 'aktiviert' : 'deaktiviert'}`);
+            }
+        });
+
+        canvasContainer.addEventListener('mousedown', (event) => {
+            if (document.pointerLockElement === canvasContainer) {
+                const cursorX = parseInt(virtualCursor.style.left || '0');
+                const cursorY = parseInt(virtualCursor.style.top || '0');
+
+                const x = offsetX + cursorX;
+                const y = offsetY + cursorY;
+
+                if (recordingMode) {
+                    points.push({ x, y });
+                    ctx.fillStyle = 'red';
+                    ctx.beginPath();
+                    ctx.arc(x, y, 5, 0, 2 * Math.PI);
+                    ctx.fill();
+                    console.log(`Roter Punkt eingelesen: (${x.toFixed(2)}, ${y.toFixed(2)})`);
+
+                    if (points.length >= 2) {
+                        const p1 = points[points.length - 2];
+                        const p2 = points[points.length - 1];
+                        drawLine(p1, p2);
+                        calculateAndStoreLineEquation(p1, p2);
+                    }
+                } else if (measuringMode) {
+                    measurementPoints.push({ x, y });
+                    ctx.fillStyle = 'green';
+                    ctx.beginPath();
+                    ctx.arc(x, y, 5, 0, 2 * Math.PI);
+                    ctx.fill();
+                    console.log(`Messpunkt gespeichert: (${x}, ${y})`);
+                }
+            }
+        });
+
+        canvasContainer.addEventListener('mousemove', (event) => {
+            if (document.pointerLockElement === canvasContainer) {
+                const movementX = event.movementX;
+                const movementY = event.movementY;
+
+                offsetX -= movementX;
+                offsetY -= movementY;
+
+                updateCanvasPosition();
+
+                // Update virtual cursor position
+                const cursorX = (parseInt(virtualCursor.style.left || '0') || canvasContainer.clientWidth / 2) + movementX;
+                const cursorY = (parseInt(virtualCursor.style.top || '0') || canvasContainer.clientHeight / 2) + movementY;
+                virtualCursor.style.left = `${cursorX}px`;
+                virtualCursor.style.top = `${cursorY}px`;
+            }
+        });
+
+        canvasContainer.addEventListener('mouseenter', () => {
+            canvasContainer.requestPointerLock();
+        });
+
+        document.addEventListener('pointerlockchange', () => {
+            if (document.pointerLockElement === canvasContainer) {
+                console.log('Pointer locked');
+                virtualCursor.style.display = 'block'; // Make sure the virtual cursor is visible
+                // Initialize virtual cursor position in the center of the canvas
+                virtualCursor.style.left = `${canvasContainer.clientWidth / 2}px`;
+                virtualCursor.style.top = `${canvasContainer.clientHeight / 2}px`;
+            } else {
+                console.log('Pointer unlocked');
+                virtualCursor.style.display = 'none'; // Hide the virtual cursor
+            }
+        });
+
+        function drawLine(p1, p2) {
+            ctx.strokeStyle = 'blue';
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.stroke();
+        }
+
+        function calculateAndStoreLineEquation(p1, p2) {
+            const m = ((p2.y - p1.y) / (p2.x - p1.x)).toFixed(2);
+            const n = (p1.y - m * p1.x).toFixed(2);
+            equations[`y${++equationCount}`] = { m: parseFloat(m), n: parseFloat(n), x1: p1.x, x2: p2.x, y1: p1.y, y2: p2.y };
+
+            console.log(`Gleichung ${equationCount}: y${equationCount} = ${m}x + ${n}`);
+        }
+
+        function calculateDistances() {
+            measurementPoints.forEach((point, index) => {
+                let minDistance = Infinity;
+                let closestEquation = '';
+                let closestPoint = { x: 0, y: 0 };
+
+                for (const [key, eq] of Object.entries(equations)) {
+                    const { m, n, x1, x2 } = eq;
+                    if (point.x >= Math.min(x1, x2) && point.x <= Math.max(x1, x2)) {
+                        const perpendicularX = (point.x + m * point.y - m * n) / (m * m + 1);
+                        const perpendicularY = (m * point.x + (m * m * point.y) + n) / (m * m + 1);
+
+                        if (perpendicularX >= Math.min(x1, x2) && perpendicularX <= Math.max(x1, x2)) {
+                            const distance = Math.abs(m * point.x - point.y + n) / Math.sqrt(m * m + 1);
+                            if (distance < minDistance) {
+                                minDistance = distance;
+                                closestEquation = key;
+                                closestPoint = { x: perpendicularX, y: perpendicularY };
+                            }
+                        }
+                    }
+                }
+
+                console.log(`Minimale Entfernung des Punktes ${index + 1} (${point.x}, ${point.y}) zu Gleichung ${closestEquation}: ${minDistance.toFixed(2)} an Punkt (${closestPoint.x.toFixed(2)}, ${closestPoint.y.toFixed(2)})`);
+                drawPerpendicularLine(point, closestPoint);
+            });
+        }
+
+        function drawPerpendicularLine(p1, p2) {
+            ctx.strokeStyle = 'purple';
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.stroke();
+        }
+    </script>
+
+</body>
+</html>

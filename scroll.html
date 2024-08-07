@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Canvas mit Scrollfunktion</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        #container {
+            width: 500px;
+            height: 500px;
+            overflow: auto;
+            border: 1px solid black;
+            position: relative;
+            background-color: white;
+        }
+        #canvas {
+            width: 1000px; /* Breite des Canvas, um Scrollen zu ermöglichen */
+            height: 1000px; /* Höhe des Canvas, um Scrollen zu ermöglichen */
+            position: absolute;
+        }
+        #info {
+            margin-bottom: 20px;
+            font-size: 16px;
+        }
+        .button-container {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #legend {
+            margin-top: 20px;
+            font-size: 14px;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">Drücken Sie die Leertaste, um den Aufnahmemodus zu aktivieren/deaktivieren. Drücken Sie die Tab-Taste, um den Messmodus zu starten/beenden. Drücken Sie ESC, um den Festhaltemodus zu beenden.</div>
+    <div id="container">
+        <canvas id="canvas" width="1000" height="1000"></canvas>
+    </div>
+    <div class="button-container">
+        <button onclick="exportToExcel()">Daten exportieren</button>
+        <button onclick="copyToClipboard()">In Zwischenablage kopieren</button>
+        <input type="file" id="fileInput" accept="image/png" />
+    </div>
+    <div id="legend">
+        <strong>Legende:</strong><br>
+        ESC: Modus verlassen<br>
+        Tab: Koordinaten zurücksetzen<br>
+        L: Aufnahmemodus aktivieren/deaktivieren<br>
+        M: Messmodus aktivieren/deaktivieren<br>
+        N: Abstände berechnen (im Messmodus)<br>
+        Klicken Sie, um Punkte auszuwählen
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.1/xlsx.full.min.js"></script>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const info = document.getElementById('info');
+        const container = document.getElementById('container');
+        const fileInput = document.getElementById('fileInput');
+
+        let points = [];
+        let recordingMode = false;
+        let measuringMode = false;
+        let equationCount = 0;
+        const equations = {};
+        const measurementPoints = [];
+        let fileCount = 0;
+
+        function toggleRecordingMode() {
+            recordingMode = !recordingMode;
+            measuringMode = false; // Ensure measuring mode is off when recording mode is toggled
+            info.textContent = `Aufnahmemodus ${recordingMode ? 'aktiviert' : 'deaktiviert'}`;
+        }
+
+        function toggleMeasuringMode() {
+            measuringMode = !measuringMode;
+            if (!measuringMode) {
+                calculateDistances();
+            }
+            info.textContent = `Messmodus ${measuringMode ? 'aktiviert' : 'deaktiviert'}`;
+        }
+
+        function exportToExcel() {
+            if (recordingMode) {
+                alert('Beenden Sie zunächst den Aufnahmemodus.');
+                return;
+            }
+
+            if (points.length === 0 && measurementPoints.length === 0) {
+                alert('Keine Daten zum Exportieren vorhanden.');
+                return;
+            }
+
+            const ws1 = XLSX.utils.json_to_sheet(points.map(p => ({ X: p.x, Y: p.y })));
+            const ws2 = XLSX.utils.json_to_sheet(measurementPoints.map(p => ({ X: p.x, Y: p.y })));
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws1, "Punkte");
+            XLSX.utils.book_append_sheet(wb, ws2, "Messpunkte");
+
+            const fileName = `daten_${fileCount++}.xlsx`;
+            XLSX.writeFile(wb, fileName);
+        }
+
+        function copyToClipboard() {
+            if (points.length === 0) {
+                alert('Keine Daten zum Kopieren vorhanden.');
+                return;
+            }
+
+            const csv = points.map(p => `${p.x},${p.y}`).join('\n');
+            const textarea = document.createElement('textarea');
+            textarea.value = csv;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            alert('Daten in die Zwischenablage kopiert.');
+        }
+
+        function drawLine(p1, p2) {
+            ctx.strokeStyle = 'blue';
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.stroke();
+        }
+
+        function calculateAndStoreLineEquation(p1, p2) {
+            const m = ((p2.y - p1.y) / (p2.x - p1.x)).toFixed(2);
+            const n = (p1.y - m * p1.x).toFixed(2);
+            equations[`y${++equationCount}`] = { m: parseFloat(m), n: parseFloat(n), x1: p1.x, x2: p2.x, y1: p1.y, y2: p2.y };
+
+            console.log(`Gleichung ${equationCount}: y${equationCount} = ${m}x + ${n}`);
+        }
+
+        function calculateDistances() {
+            measurementPoints.forEach((point, index) => {
+                let minDistance = Infinity;
+                let closestEquation = '';
+                let closestPoint = { x: 0, y: 0 };
+
+                for (const [key, eq] of Object.entries(equations)) {
+                    const { m, n, x1, x2 } = eq;
+                    if (point.x >= Math.min(x1, x2) && point.x <= Math.max(x1, x2)) {
+                        const perpendicularX = (point.x + m * point.y - m * n) / (m * m + 1);
+                        const perpendicularY = (m * point.x + (m * m * point.y) + n) / (m * m + 1);
+
+                        if (perpendicularX >= Math.min(x1, x2) && perpendicularX <= Math.max(x1, x2)) {
+                            const distance = Math.abs(m * point.x - point.y + n) / Math.sqrt(m * m + 1);
+                            if (distance < minDistance) {
+                                minDistance = distance;
+                                closestEquation = key;
+                                closestPoint = { x: perpendicularX, y: perpendicularY };
+                            }
+                        }
+                    }
+                }
+
+                console.log(`Minimale Entfernung des Punktes ${index + 1} (${point.x}, ${point.y}) zu Gleichung ${closestEquation}: ${minDistance.toFixed(2)} an Punkt (${closestPoint.x.toFixed(2)}, ${closestPoint.y.toFixed(2)})`);
+                drawPerpendicularLine(point, closestPoint);
+            });
+        }
+
+        function drawPerpendicularLine(p1, p2) {
+            ctx.strokeStyle = 'purple';
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.stroke();
+        }
+
+        function getCanvasCoordinates(event) {
+            const rect = canvas.getBoundingClientRect();
+            const scrollX = container.scrollLeft;
+            const scrollY = container.scrollTop;
+            const x = event.clientX - rect.left + scrollX;
+            const y = event.clientY - rect.top + scrollY;
+            return { x, y };
+        }
+
+        function handleClick(event) {
+            const { x, y } = getCanvasCoordinates(event);
+
+            if (recordingMode) {
+                points.push({ x, y });
+                ctx.fillStyle = 'red';
+                ctx.beginPath();
+                ctx.arc(x, y, 5, 0, 2 * Math.PI);
+                ctx.fill();
+                console.log(`Roter Punkt eingelesen: (${x.toFixed(2)}, ${y.toFixed(2)})`);
+
+                if (points.length >= 2) {
+                    const p1 = points[points.length - 2];
+                    const p2 = points[points.length - 1];
+                    drawLine(p1, p2);
+                    calculateAndStoreLineEquation(p1, p2);
+                }
+            } else if (measuringMode) {
+                measurementPoints.push({ x, y });
+                ctx.fillStyle = 'green';
+                ctx.beginPath();
+                ctx.arc(x, y, 5, 0, 2 * Math.PI);
+                ctx.fill();
+                console.log(`Messpunkt gespeichert: (${x.toFixed(2)}, ${y.toFixed(2)})`);
+            }
+        }
+
+        function handleKeydown(event) {
+            switch (event.key) {
+                case ' ':
+                    toggleRecordingMode();
+                    break;
+                case 'Tab':
+                    event.preventDefault(); // Prevent default tab behavior
+                    toggleMeasuringMode();
+                    break;
+                case 'Escape':
+                    recordingMode = measuringMode = false;
+                    info.textContent = 'Modus verlassen';
+                    break;
+                case 'n':
+                    if (measuringMode) {
+                        calculateDistances();
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        document.addEventListener('keydown', handleKeydown);
+        canvas.addEventListener('click', handleClick);
+
+        // Scroll automatically when mouse is over canvas
+        canvas.addEventListener('mousemove', (event) => {
+            const { clientX, clientY } = event;
+            const containerRect = container.getBoundingClientRect();
+            const canvasRect = canvas.getBoundingClientRect();
+
+            // Calculate the distance from the edges of the container
+            const xDist = Math.min(
+                Math.max(0, clientX - containerRect.left - canvasRect.left),
+                canvasRect.width - (clientX - containerRect.left - canvasRect.left)
+            );
+            const yDist = Math.min(
+                Math.max(0, clientY - containerRect.top - canvasRect.top),
+                canvasRect.height - (clientY - containerRect.top - canvasRect.top)
+            );
+
+            // Scroll the container based on mouse position
+            container.scrollLeft += (xDist / canvasRect.width) * 10;
+            container.scrollTop += (yDist / canvasRect.height) * 10;
+        });
+
+        // Handle file input for image upload
+        fileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file && file.type === 'image/png') {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const img = new Image();
+                    img.onload = function() {
+                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            } else {
+                alert('Bitte wählen Sie eine PNG-Datei aus.');
+            }
+        });
+    </script>
+</body>
+</html>

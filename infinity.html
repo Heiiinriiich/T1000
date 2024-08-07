@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mauskoordinaten und Cursor festhalten</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.1/xlsx.full.min.js"></script>
+    <style>
+        body, html {
+            height: 100%;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+            overflow: hidden; /* Verhindert das Scrollen der Seite */
+        }
+        body.hide-cursor {
+            cursor: none; /* Versteckt den Mauszeiger */
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #fff;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+            z-index: 1001;
+        }
+        .button-container {
+            position: absolute;
+            top: 60px;
+            left: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 1002;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer; /* Stellt sicher, dass der Cursor über dem Button sichtbar ist */
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #0056b3;
+            cursor: default; /* Zeigt den Mauszeiger beim Hover über den Button */
+        }
+        #legend {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            padding: 10px 20px;
+            font-size: 14px;
+            background-color: #fff;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+            z-index: 1001;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">Bewegen Sie die Maus, um die Koordinaten anzuzeigen.</div>
+    <div class="button-container">
+        <button onclick="togglePointerLock()">Cursor festhalten / freigeben</button>
+        <button onclick="exportToExcel()">Daten exportieren</button>
+        <button onclick="copyToClipboard()">In Zwischenablage kopieren</button>
+    </div>
+    <div id="legend">
+        <strong>Legende:</strong><br>
+        ESC: Modus verlassen<br>
+        Tab: Koordinaten zurücksetzen
+    </div>
+
+    <script>
+        let cursorLocked = false;
+        let posX = 0;
+        let posY = 0;
+        let mouseData = [];
+        let fileCount = 0; // Zählt die Anzahl der gespeicherten Dateien
+        const info = document.getElementById('info');
+
+        function togglePointerLock() {
+            if (!cursorLocked) {
+                // Setze interne Positionen auf (0, 0)
+                posX = 0;
+                posY = 0;
+                mouseData = []; // Leere die gespeicherten Daten
+                console.log(`Mauskoordinaten zurückgesetzt: X=${posX}, Y=${posY}`);
+                document.body.requestPointerLock();
+            } else {
+                document.exitPointerLock();
+            }
+        }
+
+        function exportToExcel() {
+            if (mouseData.length === 0) {
+                console.log('Keine Mausdaten zum Exportieren vorhanden.');
+                return;
+            }
+            
+            // Erstelle eine neue Arbeitsmappe und füge die Mausdaten hinzu
+            const ws = XLSX.utils.json_to_sheet(mouseData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Mausdaten");
+
+            // Erstelle einen Dateinamen basierend auf der Anzahl der gespeicherten Dateien
+            const fileName = `mauskoordinaten_${fileCount++}.xlsx`;
+
+            // Speichern der Datei
+            XLSX.writeFile(wb, fileName);
+
+            // Leere die Daten nach dem Exportieren
+            mouseData = [];
+        }
+
+        function copyToClipboard() {
+            if (mouseData.length === 0) {
+                console.log('Keine Mausdaten zum Kopieren vorhanden.');
+                return;
+            }
+
+            // Konvertiere die Mausdaten in eine CSV-Zeichenkette
+            const csv = mouseData.map(row => `${row.X},${row.Y}`).join('\n');
+
+            // Erstelle ein temporäres Textarea-Element, um die Daten in die Zwischenablage zu kopieren
+            const textarea = document.createElement('textarea');
+            textarea.value = csv;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+
+            console.log('Mausdaten in die Zwischenablage kopiert.');
+        }
+
+        document.addEventListener('pointerlockchange', () => {
+            cursorLocked = !!document.pointerLockElement;
+            if (cursorLocked) {
+                console.log('Pointer Lock aktiviert');
+                document.body.classList.add('hide-cursor');
+                document.addEventListener('mousemove', updatePosition, false);
+                document.addEventListener('keydown', handleReset, false); // Füge Event-Listener für die Tab-Taste hinzu
+            } else {
+                console.log('Pointer Lock deaktiviert');
+                document.body.classList.remove('hide-cursor');
+                document.removeEventListener('mousemove', updatePosition, false);
+                document.removeEventListener('keydown', handleReset, false); // Entferne Event-Listener für die Tab-Taste
+            }
+        }, false);
+
+        function updatePosition(event) {
+            const movementX = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
+            const movementY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
+
+            posX = Math.max(0, posX + movementX);
+            posY = Math.max(0, posY + movementY);
+
+            info.innerHTML = `Aktuelle Koordinaten: X=${posX}, Y=${posY}`;
+
+            console.log(`Mauskoordinaten: X=${posX}, Y=${posY}`);
+            mouseData.push({X: posX, Y: posY});
+        }
+
+        function handleReset(event) {
+            if (event.key === "Tab") {
+                posX = 0;
+                posY = 0;
+                mouseData = [];
+                info.innerHTML = 'Mauskoordinaten und Daten zurückgesetzt.';
+                console.log('Mauskoordinaten und Daten zurückgesetzt.');
+                event.preventDefault(); // Verhindert das Standardverhalten der Tab-Taste
+            }
+        }
+
+        document.addEventListener('mousemove', (event) => {
+            if (!cursorLocked) {
+                const x = event.clientX;
+                const y = event.clientY;
+                info.innerHTML = `Aktuelle Koordinaten: X=${x}, Y=${y}`;
+                console.log(`Mauskoordinaten: X=${x}, Y=${y}`);
+            }
+        });
+    </script>
+</body>
+</html>

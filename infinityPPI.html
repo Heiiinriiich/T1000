@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PPI-Schätzung</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.1/xlsx.full.min.js"></script>
+    <style>
+        body, html {
+            height: 100%;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+        }
+        #info, #ppi-info, #instructions {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #fff;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+            margin-bottom: 10px;
+        }
+        #reference-width {
+            padding: 8px;
+            font-size: 14px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            width: 80px;
+            margin-top: 5px;
+            margin-bottom: 10px;
+        }
+        .button-container {
+            display: flex;
+            gap: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer; /* Stellt sicher, dass der Cursor über dem Button sichtbar ist */
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #legend {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            padding: 10px 20px;
+            font-size: 14px;
+            background-color: #fff;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+            z-index: 1001;
+        }
+		#reference-scale {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            max-width: 400px;
+            margin-top: 20px;
+            border: 1px solid #ccc;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+            padding: 10px;
+        }
+        .scale-mark {
+            width: 1px;
+            height: 20px;
+            background-color: #000;
+        }
+        .scale-label {
+            font-size: 12px;
+            text-align: center;
+            width: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">Bewegen Sie die Maus, um die Koordinaten anzuzeigen.</div>
+    
+    <div id="ppi-info">
+        PPI-Wert: <span id="ppi-value">Noch nicht berechnet</span>
+    </div>
+
+    <div id="instructions">
+        <p>Bitte halten Sie ein Kreditkarte an Ihren Bildschirm und geben Sie die gemessene Breite in Pixeln ein.</p>
+        <label for="reference-width">Breite in Pixel:</label>
+        <input type="number" id="reference-width" placeholder="z.B. 85.6">
+        <button onclick="calculatePPI()">PPI berechnen</button>
+    </div>
+
+    <div id="reference-scale">
+        <div class="scale-mark"></div>
+        <div class="scale-label">0</div>
+        <div class="scale-mark"></div>
+        <div class="scale-label">50</div>
+        <div class="scale-mark"></div>
+        <div class="scale-label">100</div>
+        <div class="scale-mark"></div>
+        <div class="scale-label">150</div>
+        <div class="scale-mark"></div>
+        <div class="scale-label">200</div>
+        <div class="scale-mark"></div>
+        <div class="scale-label">250</div>
+        <div class="scale-mark"></div>
+        <div class="scale-label">300</div>
+        <div class="scale-mark"></div>
+        <div class="scale-label">350</div>
+        <div class="scale-mark"></div>
+        <div class="scale-label">400</div>
+    </div>
+    
+    <div class="button-container">
+        <button onclick="togglePointerLock()">Cursor festhalten / freigeben</button>
+        <button onclick="exportToExcel()">Daten exportieren</button>
+        <button onclick="copyToClipboard()">In Zwischenablage kopieren</button>
+    </div>
+
+    <div id="legend">
+        <strong>Legende:</strong><br>
+        ESC: Modus verlassen<br>
+        Tab: Koordinaten zurücksetzen
+    </div>
+
+    <script>
+        let cursorLocked = false;
+        let posX = 0;
+        let posY = 0;
+        let mouseData = [];
+        let fileCount = 0; // Zählt die Anzahl der gespeicherten Dateien
+        const info = document.getElementById('info');
+        const ppiValueSpan = document.getElementById('ppi-value');
+        const referenceWidthInput = document.getElementById('reference-width');
+
+        function calculatePPI() {
+            const referenceWidthPx = parseFloat(referenceWidthInput.value);
+            if (!referenceWidthPx || referenceWidthPx <= 0) {
+                alert("Bitte geben Sie eine gültige Breite in Pixel ein.");
+                return;
+            }
+
+            // Annahme: Breite einer Kreditkarte ist 85.6 mm
+            const creditCardWidthMM = 85.6;
+            const ppi = referenceWidthPx / (creditCardWidthMM / 25.4); // 1 inch = 25.4 mm
+            ppiValueSpan.textContent = ppi.toFixed(2);
+
+            console.log(`Berechneter PPI-Wert: ${ppi.toFixed(2)}`);
+        }
+
+        function togglePointerLock() {
+            if (!cursorLocked) {
+                // Setze interne Positionen auf (0, 0)
+                posX = 0;
+                posY = 0;
+                mouseData = []; // Leere die gespeicherten Daten
+                console.log(`Mauskoordinaten zurückgesetzt: X=${posX}, Y=${posY}`);
+                document.body.requestPointerLock();
+            } else {
+                document.exitPointerLock();
+            }
+        }
+		function exportToExcel() {
+            if (mouseData.length === 0) {
+                console.log('Keine Mausdaten zum Exportieren vorhanden.');
+                return;
+            }
+            
+            // Erstelle eine neue Arbeitsmappe und füge die Mausdaten hinzu
+            const ws = XLSX.utils.json_to_sheet(mouseData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Mausdaten");
+
+            // Erstelle einen Dateinamen basierend auf der Anzahl der gespeicherten Dateien
+            const fileName = `mauskoordinaten_${fileCount++}.xlsx`;
+
+            // Speichern der Datei
+            XLSX.writeFile(wb, fileName);
+
+            // Leere die Daten nach dem Exportieren
+            mouseData = [];
+        }
+
+        function copyToClipboard() {
+            if (mouseData.length === 0) {
+                console.log('Keine Mausdaten zum Kopieren vorhanden.');
+                return;
+            }
+
+            // Konvertiere die Mausdaten in eine CSV-Zeichenkette
+            const csv = mouseData.map(row => `${row.X},${row.Y}`).join('\n');
+
+            // Erstelle ein temporäres Textarea-Element, um die Daten in die Zwischenablage zu kopieren
+            const textarea = document.createElement('textarea');
+            textarea.value = csv;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+
+            console.log('Mausdaten in die Zwischenablage kopiert.');
+        }
+
+        document.addEventListener('pointerlockchange', () => {
+            cursorLocked = !!document.pointerLockElement;
+            if (cursorLocked) {
+                console.log('Pointer Lock aktiviert');
+                document.body.classList.add('hide-cursor');
+                document.addEventListener('mousemove', updatePosition, false);
+                document.addEventListener('keydown', handleReset, false); // Füge Event-Listener für die Tab-Taste hinzu
+            } else {
+                console.log('Pointer Lock deaktiviert');
+                document.body.classList.remove('hide-cursor');
+                document.removeEventListener('mousemove', updatePosition, false);
+                document.removeEventListener('keydown', handleReset, false); // Entferne Event-Listener für die Tab-Taste
+            }
+        }, false);
+
+        function updatePosition(event) {
+            const movementX = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
+            const movementY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
+
+            posX = Math.max(0, posX + movementX);
+            posY = Math.max(0, posY + movementY);
+
+            info.innerHTML = `Aktuelle Koordinaten: X=${posX.toFixed(2)}, Y=${posY.toFixed(2)}`;
+
+            console.log(`Mauskoordinaten: X=${posX.toFixed(2)}, Y=${posY.toFixed(2)}`);
+            mouseData.push({ X: posX, Y: posY });
+        }
+
+        function handleReset(event) {
+            if (event.key === "Tab") {
+                posX = 0;
+                posY = 0;
+                mouseData = [];
+                info.innerHTML = 'Mauskoordinaten und Daten zurückgesetzt.';
+                console.log('Mauskoordinaten und Daten zurückgesetzt.');
+                event.preventDefault(); // Verhindert das Standardverhalten der Tab-Taste
+            }
+        }
+
+        document.addEventListener('mousemove', (event) => {
+            if (!cursorLocked) {
+                const x = event.clientX;
+                const y = event.clientY;
+                console.log(`Mauskoordinaten: X=${x}, Y=${y}`);
+            }
+        });
+    </script>
+</body>
+</html>
