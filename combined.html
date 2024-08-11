@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mauskoordinaten, Cursor festhalten und Geradengleichung berechnen</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.1/xlsx.full.min.js"></script>
+    <style>
+        body, html {
+            height: 100%;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+            overflow: scroll;
+        }
+        body.hide-cursor {
+            cursor: none;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #fff;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+            z-index: 1001;
+        }
+        .button-container {
+            position: absolute;
+            top: 60px;
+            left: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 1002;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #legend {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            padding: 10px 20px;
+            font-size: 14px;
+            background-color: #fff;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+            z-index: 1001;
+        }
+        #instructions {
+            margin-bottom: 20px;
+            position: absolute;
+            top: 120px;
+            left: 10px;
+            z-index: 1001;
+            background-color: #fff;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+        }
+        .crosshair {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: none;
+            border-left: 2px solid black;
+            border-top: 2px solid black;
+            transform: translate(-50%, -50%);
+            z-index: 1003;
+        }
+        .crosshair::before {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 20px;
+            height: 20px;
+            border-right: 2px solid black;
+            border-bottom: 2px solid black;
+            transform: translate(-50%, -50%);
+        }
+    </style>
+</head>
+<body>
+    <div id="info">Bewegen Sie die Maus, um die Koordinaten anzuzeigen.</div>
+    <div class="button-container">
+        <button onclick="togglePointerLock()">Cursor festhalten / freigeben</button>
+        <button onclick="exportToExcel()">Daten exportieren</button>
+        <button onclick="copyToClipboard()">In Zwischenablage kopieren</button>
+    </div>
+    <div id="instructions">Drücken Sie die Leertaste, um den Aufnahmemodus zu aktivieren/deaktivieren. Drücken Sie "Backspace" um alles zurückzusetzen.</div>
+    <div id="legend">
+        <strong>Legende:</strong><br>
+        ESC: Modus verlassen<br>
+        Tab: Messmodus starten/beenden<br>
+        DEL / Backspace: Koordinaten und Daten zurücksetzen
+    </div>
+    <canvas id="canvas" width="" height="100%"></canvas>
+    <div class="crosshair" id="crosshair"></div>
+
+    <script>
+        let cursorLocked = false;
+        let posX = 0;
+        let posY = 0;
+        let posXPrev = 0;
+        let posYPrev = 0;
+        let mouseData = [];
+        let fileCount = 0;
+        const info = document.getElementById('info');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const crosshair = document.getElementById('crosshair');
+        let points = [];
+        let recordingMode = false;
+        let measuringMode = false;
+        let equationCount = 0;
+        const equations = {};
+        const measurementPoints = [];
+
+        function togglePointerLock() {
+            if (!cursorLocked) {
+                posX = posY = 0;
+                posXPrev = posYPrev = 0;
+                mouseData = [];
+                document.body.requestPointerLock();
+            } else {
+                document.exitPointerLock();
+            }
+        }
+
+        function exportToExcel() {
+            if (mouseData.length === 0) {
+                console.log('Keine Mausdaten zum Exportieren vorhanden.');
+                return;
+            }
+            
+            const ws = XLSX.utils.json_to_sheet(mouseData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Mausdaten");
+            const fileName = `mauskoordinaten_${fileCount++}.xlsx`;
+            XLSX.writeFile(wb, fileName);
+            mouseData = [];
+        }
+
+        function copyToClipboard() {
+            if (mouseData.length === 0) {
+                console.log('Keine Mausdaten zum Kopieren vorhanden.');
+                return;
+            }
+
+            const csv = mouseData.map(row => `${row.X},${row.Y}`).join('\n');
+            const textarea = document.createElement('textarea');
+            textarea.value = csv;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+
+            console.log('Mausdaten in die Zwischenablage kopiert.');
+        }
+
+        document.addEventListener('pointerlockchange', () => {
+        cursorLocked = !!document.pointerLockElement;
+        if (cursorLocked) {
+        document.body.classList.add('hide-cursor');
+        document.addEventListener('mousemove', updatePosition);
+        document.addEventListener('click', handleClick);
+        } else {
+        document.body.classList.remove('hide-cursor');
+        document.removeEventListener('mousemove', updatePosition);
+        document.removeEventListener('click', handleClick);
+        }
+        }, false);
+
+    function updatePosition(event) {
+        const movementX = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
+        const movementY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
+
+        posX = Math.max(0, posX + movementX);
+        posY = Math.max(0, posY + movementY);
+
+        crosshair.style.left = `${posX}px`;
+        crosshair.style.top = `${posY}px`;
+
+        mouseData.push({ X: posX, Y: posY });
+    }
+
+    document.addEventListener('keydown', (event) => { 
+        if (event.code === 'Space') {
+            recordingMode = !recordingMode;
+            info.innerHTML = recordingMode ? 'Aufnahmemodus aktiviert.' : 'Aufnahmemodus deaktiviert.';
+            event.preventDefault();
+        } else if (event.code === 'Tab') {
+            measuringMode = !measuringMode;
+            info.innerHTML = measuringMode ? 'Messmodus aktiviert. Klicken Sie, um Messpunkte hinzuzufügen.' : 'Messmodus beendet. Berechnete Abstände werden angezeigt.';
+            if (!measuringMode) {
+                calculateDistances();
+            }
+            event.preventDefault();
+        }
+        
+    });
+
+    function handleClick(event) {
+        const rect = canvas.getBoundingClientRect();
+        const x = cursorLocked ? posX : event.clientX - rect.left;
+        const y = cursorLocked ? posY : event.clientY - rect.top;
+
+        if (recordingMode) {
+            points.push({ x, y });
+            drawPoint(x, y, 'red');
+            info.innerHTML = `Punkt gespeichert: (${x}, ${y})`;
+            
+            if (points.length >= 2) {
+                const p1 = points[points.length - 2];
+                const p2 = points[points.length - 1];
+                drawLine(p1, p2);
+                calculateAndStoreLineEquation(p1, p2);
+            }
+        } else if (measuringMode) {
+            measurementPoints.push({ x, y });
+            drawPoint(x, y, 'green');
+            info.innerHTML = `Messpunkt gespeichert: (${x}, ${y})`;
+        }
+    }
+        function drawPoint(x, y, color) {
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(x, y, 5, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+
+
+        function drawLine(p1, p2) {
+            ctx.strokeStyle = 'blue';
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.stroke();
+        }
+
+        function calculateAndStoreLineEquation(p1, p2) {
+            const m = ((p2.y - p1.y) / (p2.x - p1.x)).toFixed(2);
+            const n = (p1.y - m * p1.x).toFixed(2);
+            equations[`y${++equationCount}`] = { m: parseFloat(m), n: parseFloat(n), x1: p1.x, x2: p2.x, y1: p1.y, y2: p2.y };
+
+            const equationText = `y${equationCount} = ${m}x + ${n}`;
+            console.log(`Gleichung ${equationCount}: ${equationText}`);
+            info.innerHTML = `Gleichung ${equationCount}: ${equationText}`;
+        }
+
+        function calculateDistances() {
+            measurementPoints.forEach((point, index) => {
+                let minDistance = Infinity;
+                let closestEquation = '';
+                let closestPoint = { x: 0, y: 0 };
+
+                for (const [key, eq] of Object.entries(equations)) {
+                    const { m, n, x1, x2 } = eq;
+                    if (point.x >= Math.min(x1, x2) && point.x <= Math.max(x1, x2)) {
+                        const perpendicularX = (point.x + m * point.y - m * n) / (m * m + 1);
+                        const perpendicularY = (m * point.x + (m * m * point.y) + n) / (m * m + 1);
+
+                        if (perpendicularX >= Math.min(x1, x2) && perpendicularX <= Math.max(x1, x2)) {
+                            const distance = Math.abs(m * point.x - point.y + n) / Math.sqrt(m * m + 1);
+                            if (distance < minDistance) {
+                                minDistance = distance;
+                                closestEquation = key;
+                                closestPoint = { x: perpendicularX, y: perpendicularY };
+                            }
+                        }
+                    }
+                }
+
+                console.log(`Minimale Entfernung des Punktes ${index + 1} (${point.x}, ${point.y}) zu Gleichung ${closestEquation}: ${minDistance.toFixed(2)} an Punkt (${closestPoint.x.toFixed(2)}, ${closestPoint.y.toFixed(2)})`);
+                drawPerpendicularLine(point, closestPoint);
+            });
+        }
+
+        function drawPerpendicularLine(p1, p2) {
+            ctx.strokeStyle = 'purple';
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.stroke();
+        }
+    </script>
+</body>
+</html>

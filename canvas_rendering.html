@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Offscreen-Canvas mit Pointer Lock</title>
+    <style>
+        #canvas-container {
+            width: 800px;
+            height: 600px;
+            overflow: hidden; /* Kein Scrollbalken */
+            border: 1px solid #000;
+            position: relative;
+            cursor: crosshair;
+        }
+        #onscreen-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        #info {
+            margin-top: 10px;
+            font-family: Arial, sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container">
+        <canvas id="onscreen-canvas"></canvas>
+    </div>
+    <div id="info">Klicke auf das Canvas, um die Steuerung zu aktivieren. Bewege die Maus, um den Canvas zu verschieben.</div>
+    <script>
+        const container = document.getElementById('canvas-container');
+        const onscreenCanvas = document.getElementById('onscreen-canvas');
+        const offscreenCanvas = document.createElement('canvas');
+        const onscreenCtx = onscreenCanvas.getContext('2d');
+        const offscreenCtx = offscreenCanvas.getContext('2d');
+        const info = document.getElementById('info');
+        
+        let points = [];
+        let measurementPoints = [];
+        let scrollX = 0; // Scrollposition X
+        let scrollY = 0; // Scrollposition Y
+        offscreenCanvas.width = 16000;
+        offscreenCanvas.height = 16000;
+        onscreenCanvas.width = container.clientWidth;
+        onscreenCanvas.height = container.clientHeight;
+
+        // Event Listener für Mausklicks auf dem Onscreen-Canvas
+        onscreenCanvas.addEventListener('click', requestPointerLock);
+
+        function requestPointerLock() {
+            onscreenCanvas.requestPointerLock();
+        }
+
+        // Mausbewegungen zum Scrollen verwenden
+        document.addEventListener('mousemove', (event) => {
+            if (document.pointerLockElement === onscreenCanvas) {
+                // Umkehren der Bewegungsrichtung
+                scrollX += event.movementX;
+                scrollY += event.movementY;
+
+                // Begrenzung der Scrollbewegung
+                scrollX = Math.max(0, Math.min(scrollX, offscreenCanvas.width - onscreenCanvas.width));
+                scrollY = Math.max(0, Math.min(scrollY, offscreenCanvas.height - onscreenCanvas.height));
+
+                render();
+            }
+        });
+
+        document.addEventListener('keydown', (event) => { 
+            if (event.code === 'Space') {
+                recordingMode = !recordingMode;
+                info.innerHTML = recordingMode ? 'Aufnahmemodus aktiviert.' : 'Aufnahmemodus deaktiviert.';
+                event.preventDefault();
+            } else if (event.code === 'Tab') {
+                measuringMode = !measuringMode;
+                info.innerHTML = measuringMode ? 'Messmodus aktiviert. Klicken Sie, um Messpunkte hinzuzufügen.' : 'Messmodus beendet. Berechnete Abstände werden angezeigt.';
+                if (!measuringMode) {
+                    calculateDistances();
+                }
+                event.preventDefault();
+            }
+        
+        });
+        
+        function handleClick(event) {
+            const rect = onscreenCanvas.getBoundingClientRect();
+            const x = scrollX + onscreenCanvas.width / 2; // Klickposition in Mitte des Canvas verschieben
+            const y = scrollY + onscreenCanvas.height / 2;
+
+            if (recordingMode) {
+                points.push({ x, y });
+                drawPoint(x, y, 'red', offscreenCtx);
+                info.innerHTML = `Punkt gespeichert: (${x}, ${y})`;
+
+                if (points.length >= 2) {
+                    const p1 = points[points.length - 2];
+                    const p2 = points[points.length - 1];
+                    drawLine(p1, p2, offscreenCtx);
+                    calculateAndStoreLineEquation(p1, p2);
+                }
+            } else if (measuringMode) {
+                measurementPoints.push({ x, y });
+                drawPoint(x, y, 'green', offscreenCtx);
+                info.innerHTML = `Messpunkt gespeichert: (${x}, ${y})`;
+            }
+
+            render();
+        }
+
+        function drawPoint(x, y, color, ctx) {
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(x, y, 5, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+
+        function drawLine(p1, p2, ctx) {
+            ctx.strokeStyle = 'blue';
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.stroke();
+        }
+
+        function calculateAndStoreLineEquation(p1, p2) {
+            const m = ((p2.y - p1.y) / (p2.x - p1.x)).toFixed(2);
+            const n = (p1.y - m * p1.x).toFixed(2);
+            equations[`y${++equationCount}`] = { m: parseFloat(m), n: parseFloat(n), x1: p1.x, x2: p2.x, y1: p1.y, y2: p2.y };
+
+            const equationText = `y${equationCount} = ${m}x + ${n}`;
+            console.log(`Gleichung ${equationCount}: ${equationText}`);
+            info.innerHTML = `Gleichung ${equationCount}: ${equationText}`;
+        }
+
+        function calculateDistances() {
+            measurementPoints.forEach((point, index) => {
+                let minDistance = Infinity;
+                let closestEquation = '';
+                let closestPoint = { x: 0, y: 0 };
+
+                for (const [key, eq] of Object.entries(equations)) {
+                    const { m, n, x1, x2 } = eq;
+                    if (point.x >= Math.min(x1, x2) && point.x <= Math.max(x1, x2)) {
+                        const perpendicularX = (point.x + m * point.y - m * n) / (m * m + 1);
+                        const perpendicularY = (m * point.x + (m * m * point.y) + n) / (m * m + 1);
+
+                        if (perpendicularX >= Math.min(x1, x2) && perpendicularX <= Math.max(x1, x2)) {
+                            const distance = Math.abs(m * point.x - point.y + n) / Math.sqrt(m * m + 1);
+                            if (distance < minDistance) {
+                                minDistance = distance;
+                                closestEquation = key;
+                                closestPoint = { x: perpendicularX, y: perpendicularY };
+                            }
+                        }
+                    }
+                }
+
+                console.log(`Minimale Entfernung des Punktes ${index + 1} (${point.x}, ${point.y}) zu Gleichung ${closestEquation}: ${minDistance.toFixed(2)} an Punkt (${closestPoint.x.toFixed(2)}, ${closestPoint.y.toFixed(2)})`);
+                drawPerpendicularLine(point, closestPoint);
+            });
+        }
+
+        function drawPerpendicularLine(p1, p2) {
+            ctx.strokeStyle = 'purple';
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.stroke();
+        }
+
+        // Rendern des Offscreen-Canvas auf den Onscreen-Canvas
+        function render() {
+            onscreenCtx.clearRect(0, 0, onscreenCanvas.width, onscreenCanvas.height);
+            onscreenCtx.drawImage(offscreenCanvas, scrollX, scrollY, onscreenCanvas.width, onscreenCanvas.height, 0, 0, onscreenCanvas.width, onscreenCanvas.height);
+        }
+
+        // Initiales Rendern
+        render();
+
+        // Event Listener für Mausklicks auf dem Onscreen-Canvas zum Zeichnen von Punkten
+        onscreenCanvas.addEventListener('click', handleClick);
+    </script>
+</body>
+</html>
