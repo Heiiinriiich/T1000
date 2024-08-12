@@ -39,8 +39,17 @@
         
         let points = [];
         let measurementPoints = [];
+        let equations = {};
+        let equationCount = 0;
+        let recordingMode = false;
+        let measuringMode = false;
+        let calibrateMode = false;
         let scrollX = 0; // Scrollposition X
         let scrollY = 0; // Scrollposition Y
+        let crosshairVisible = true;
+        let calibrationOffsetX = 0; // Kalibrierungsverschiebung X
+        let calibrationOffsetY = 0; // Kalibrierungsverschiebung Y
+
         offscreenCanvas.width = 16000;
         offscreenCanvas.height = 16000;
         onscreenCanvas.width = container.clientWidth;
@@ -65,13 +74,14 @@
                 scrollY = Math.max(0, Math.min(scrollY, offscreenCanvas.height - onscreenCanvas.height));
 
                 render();
+                drawCrosshair(onscreenCanvas.width / 2, onscreenCanvas.height / 2, onscreenCtx);
             }
         });
 
         document.addEventListener('keydown', (event) => { 
             if (event.code === 'Space') {
                 recordingMode = !recordingMode;
-                info.innerHTML = recordingMode ? 'Aufnahmemodus aktiviert.' : 'Aufnahmemodus deaktiviert.';
+                info.innerHTML = recordingMode ? 'Aufnahmemodus aktiviert.' : 'Aufnahmemodus beendet.';
                 event.preventDefault();
             } else if (event.code === 'Tab') {
                 measuringMode = !measuringMode;
@@ -80,16 +90,45 @@
                     calculateDistances();
                 }
                 event.preventDefault();
+            } else if (event.code === 'Digit1') {
+                calibrateMode = !calibrateMode;
+                info.innerHTML = calibrateMode ? 'Kalibriermodus aktiviert. Klicken Sie, um den Messpunkt zu kalibrieren.' : 'Kalibriermodus beendet.'
+                event.preventDefault();
             }
-        
         });
-        
+
         function handleClick(event) {
-            const rect = onscreenCanvas.getBoundingClientRect();
             const x = scrollX + onscreenCanvas.width / 2; // Klickposition in Mitte des Canvas verschieben
             const y = scrollY + onscreenCanvas.height / 2;
 
-            if (recordingMode) {
+            if (calibrateMode && points.length > 0) {
+                const dx = x - points[0].x;
+                const dy = y - points[0].y;
+
+                // Aktualisiere den Kalibrierungsoffset
+                calibrationOffsetX += dx;
+                calibrationOffsetY += dy;
+
+                // Verschiebe den ersten Punkt und alle anderen entsprechend
+                points = points.map(p => ({ x: p.x + dx, y: p.y + dy }));
+                measurementPoints = measurementPoints.map(p => ({ x: p.x + dx, y: p.y + dy }));
+
+                // Rechne die Gleichungen neu
+                equations = {};
+                for (let i = 1; i < points.length; i++) {
+                    calculateAndStoreLineEquation(points[i - 1], points[i]);
+                }
+
+                // Clear den Offscreen-Canvas und rendern die Elemente neu
+                offscreenCtx.clearRect(0, 0, offscreenCanvas.width, offscreenCanvas.height);
+                points.forEach(point => drawPoint(point.x, point.y, 'red', offscreenCtx));
+                measurementPoints.forEach(point => drawPoint(point.x, point.y, 'green', offscreenCtx));
+                Object.values(equations).forEach(eq => drawLine({x: eq.x1, y: eq.y1}, {x: eq.x2, y: eq.y2}, offscreenCtx));
+
+                // Deaktiviere den Kalibriermodus nach der Kalibrierung
+                calibrateMode = false;
+                info.innerHTML = 'Kalibrierung abgeschlossen.';
+            } else if (recordingMode) {
                 points.push({ x, y });
                 drawPoint(x, y, 'red', offscreenCtx);
                 info.innerHTML = `Punkt gespeichert: (${x}, ${y})`;
@@ -106,7 +145,7 @@
                 info.innerHTML = `Messpunkt gespeichert: (${x}, ${y})`;
             }
 
-            render();
+            render(true); // Neu rendern mit der Berücksichtigung der Kalibrierung
         }
 
         function drawPoint(x, y, color, ctx) {
@@ -158,11 +197,11 @@
                 }
 
                 console.log(`Minimale Entfernung des Punktes ${index + 1} (${point.x}, ${point.y}) zu Gleichung ${closestEquation}: ${minDistance.toFixed(2)} an Punkt (${closestPoint.x.toFixed(2)}, ${closestPoint.y.toFixed(2)})`);
-                drawPerpendicularLine(point, closestPoint);
+                drawPerpendicularLine(point, closestPoint, offscreenCtx);
             });
         }
 
-        function drawPerpendicularLine(p1, p2) {
+        function drawPerpendicularLine(p1, p2, ctx) {
             ctx.strokeStyle = 'purple';
             ctx.beginPath();
             ctx.moveTo(p1.x, p1.y);
@@ -170,10 +209,29 @@
             ctx.stroke();
         }
 
-        // Rendern des Offscreen-Canvas auf den Onscreen-Canvas
-        function render() {
+        function drawCrosshair(x, y, ctx) {
+            ctx.strokeStyle = 'black';
+            ctx.beginPath();
+            ctx.moveTo(x - 10, y);
+            ctx.lineTo(x + 10, y);
+            ctx.moveTo(x, y - 10);
+            ctx.lineTo(x, y + 10);
+            ctx.stroke();
+        }
+
+        function render(adjusted = false) {
             onscreenCtx.clearRect(0, 0, onscreenCanvas.width, onscreenCanvas.height);
-            onscreenCtx.drawImage(offscreenCanvas, scrollX, scrollY, onscreenCanvas.width, onscreenCanvas.height, 0, 0, onscreenCanvas.width, onscreenCanvas.height);
+
+            // Zeichne das verschobene Offscreen-Canvas
+            const offsetX = adjusted ? calibrationOffsetX : 0;
+            const offsetY = adjusted ? calibrationOffsetY : 0;
+
+            onscreenCtx.drawImage(offscreenCanvas, scrollX + offsetX, scrollY + offsetY, onscreenCanvas.width, onscreenCanvas.height, 0, 0, onscreenCanvas.width, onscreenCanvas.height);
+
+            // Zeichne das Crosshair an der Position des virtuellen Cursors
+            if (document.pointerLockElement === onscreenCanvas && crosshairVisible) {
+                drawCrosshair(onscreenCanvas.width / 2, onscreenCanvas.height / 2, onscreenCtx);
+            }
         }
 
         // Initiales Rendern
