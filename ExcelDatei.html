@@ -1,0 +1,46 @@
+function exportToExcel() {
+    if (mouseData.length === 0) {
+        console.log('Keine Mausdaten zum Exportieren vorhanden.');
+        return;
+    }
+
+    // Erstelle eine neue Arbeitsmappe
+    const wb = XLSX.utils.book_new();
+
+    // Erstelle ein neues Arbeitsblatt
+    const ws = XLSX.utils.aoa_to_sheet([]);
+
+    // Fülle die Header-Zeilen
+    ws['A6'] = { v: 'Kabeltrasse:', s: { font: { sz: 14, name: 'Calibri' } } };
+    ws['A7'] = { v: 'Teiltrasse', s: { font: { sz: 11, name: 'Calibri' } } };
+    ws['B7'] = { v: 'Näh-Abschnitt:', s: { font: { sz: 11, name: 'Calibri' } } };
+    ws['C7'] = { v: 'Beginn-km:', s: { font: { sz: 11, name: 'Calibri' } } };
+    ws['D6'] = { v: 'Kabeltrasse 1', s: { font: { sz: 14, name: 'Calibri' } } };
+    ws['D7'] = { v: 'Ende-km', s: { font: { sz: 11, name: 'Calibri' } } };
+    ws['E7'] = { v: 'Beginn-Abst.:', s: { font: { sz: 11, name: 'Calibri' } } };
+    ws['F7'] = { v: 'Ende-Abst.:', s: { font: { sz: 11, name: 'Calibri' } } };
+    ws['G7'] = { v: 'Kreuz-Abst.:', s: { font: { sz: 11, name: 'Calibri' } } };
+    ws['H7'] = { v: 'Bodenleitf.:', s: { font: { sz: 11, name: 'Calibri' } } };
+    ws['I7'] = { v: 'Anz.-Gleise:', s: { font: { sz: 11, name: 'Calibri' } } };
+    ws['J7'] = { v: 'Oberleitung:', s: { font: { sz: 11, name: 'Calibri' } } };
+
+    // Füge dynamische Daten ab Zeile 8 ein
+    mouseData.forEach((data, index) => {
+        const row = index + 8;
+        ws[`A${row}`] = { v: '1a', s: { font: { sz: 11, name: 'Calibri' } } };  // Festgelegter Text in Spalte A
+        ws[`B${row}`] = { v: (index + 1), s: { font: { sz: 11, name: 'Calibri' } } }; // Fortlaufende Nummer in Spalte B
+        // Platzhalter für Variable in Spalte C
+        // Platzhalter für Variable in Spalte D
+        // Weitere Daten aus Variablen in den folgenden Spalten
+        // Füge hier den Code für die Variablen ein, die in die Spalten C bis G eingetragen werden sollen
+    });
+
+    // Füge das Arbeitsblatt der Arbeitsmappe hinzu
+    XLSX.utils.book_append_sheet(wb, ws, "1A-Daten");
+
+    // Speichern der Datei
+    const fileName = `mauskoordinaten_${fileCount++}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+
+    mouseData = []; // Leere die Daten nach dem Exportieren
+}

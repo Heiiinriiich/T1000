@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Rendering</title>
+    <!-- PDF.js von einem CDN laden -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+</head>
+<body>
+    <input type="file" id="fileInput" accept="application/pdf">
+    <canvas id="onscreenCanvas"></canvas>
+
+    <script>
+        const onscreenCanvas = document.getElementById('onscreenCanvas');
+        const onscreenCtx = onscreenCanvas.getContext('2d');
+        const offscreenCanvas = document.createElement('canvas');
+        const offscreenCtx = offscreenCanvas.getContext('2d');
+
+        // PDF.js Worker-Pfad festlegen
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+
+        document.getElementById('fileInput').addEventListener('change', handleFileUpload);
+
+        async function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (file && file.type === 'application/pdf') {
+                const fileReader = new FileReader();
+                fileReader.onload = async function () {
+                    try {
+                        const pdfData = new Uint8Array(this.result);
+                        const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;
+
+                        // Bestimme die Größe des Offscreen-Canvas
+                        const firstPage = await pdf.getPage(1);
+                        const viewport = firstPage.getViewport({ scale: 1 });
+
+                        offscreenCanvas.width = viewport.width;
+                        offscreenCanvas.height = pdf.numPages * viewport.height;
+
+                        let totalHeight = 0;
+
+                        for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+                            const page = await pdf.getPage(pageNumber);
+                            const viewport = page.getViewport({ scale: 1 });
+
+                            // Passe die Offscreen-Canvas-Größe an
+                            offscreenCanvas.width = Math.max(offscreenCanvas.width, viewport.width);
+                            totalHeight += viewport.height;
+                            offscreenCanvas.height = totalHeight;
+
+                            const renderContext = {
+                                canvasContext: offscreenCtx,
+                                viewport: viewport,
+                                transform: [1, 0, 0, 1, 0, totalHeight - viewport.height]
+                            };
+
+                            await page.render(renderContext).promise;
+                        }
+
+                        render();
+                    } catch (error) {
+                        console.error('Error rendering PDF:', error);
+                    }
+                };
+                fileReader.readAsArrayBuffer(file);
+            }
+        }
+
+        function render(adjusted = false) {
+            onscreenCtx.clearRect(0, 0, onscreenCanvas.width, onscreenCanvas.height);
+
+            const offsetX = adjusted ? calibrationOffsetX : 0;
+            const offsetY = adjusted ? calibrationOffsetY : 0;
+
+            onscreenCtx.drawImage(offscreenCanvas, scrollX + offsetX, scrollY + offsetY, onscreenCanvas.width, onscreenCanvas.height, 0, 0, onscreenCanvas.width, onscreenCanvas.height);
+
+            if (document.pointerLockElement === onscreenCanvas && crosshairVisible) {
+                drawCrosshair(onscreenCanvas.width / 2, onscreenCanvas.height / 2, onscreenCtx);
+            }
+        }
+    </script>
+</body>
+</html>
