@@ -32,8 +32,8 @@
         }
 
         #canvas-container {
-            width: 1400px;
-            height: 1000px;
+            width: 1400px;  
+            height: 900px;
             overflow: hidden;
             border-radius: var(--border-radius);
             box-shadow: var(--box-shadow);
@@ -143,6 +143,19 @@
             color: var(--font-color);
             font-family: var(--font-family);
         }
+
+        #distance-input {
+            margin-bottom: 15px;
+            width: 100px;
+            height: 50px;
+            backdrop-filter: blur(10px);
+            background: var(--blur-background);
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            font-family: var(--font-family);
+            text-align: center;
+        }
+
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.1/xlsx.full.min.js"></script>
@@ -157,6 +170,11 @@
                 <span class="material-icons">upload</span> PDF hochladen
             </label>
             <input type="file" id="file-input" accept="application/pdf">
+            <div id="file-name">Keine Datei hochgeladen</div>
+    </div>
+    <div>
+        <label for="distance-input">Startwert in km:</label>
+        <input type="number" id="distance-input" value="0.0" step="0.1">
     </div>
     <div id="legend">
         <strong>Legende:</strong><br>
@@ -178,6 +196,7 @@
         const info = document.getElementById('info');
         const fileInput = document.getElementById('file-input');
         const fileNameDisplay = document.getElementById('file-name');
+        const distanceInput = document.getElementById('distance-input');
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
         let pdfDocument; // Variable zur Speicherung des PDF-Dokuments
@@ -188,12 +207,17 @@
         let recordingMode = false;
         let measuringMode = false;
         let calibrateMode = false;
+        let distanceDisplay = false;
+        let startDistance = 0; // Startdistanz nach Eingabe über Textfeld
+        let dotDistance = 0;
+        let currentIndex = 0;
+        let distanceScale = 1; // Skalierungsfaktor für die Entfernungsmessung
+        let distance = 0;
         let scrollX = 0; // Scrollposition X
         let scrollY = 0; // Scrollposition Y
         let crosshairVisible = true;
         let calibrationOffsetX = 0; // Kalibrierungsverschiebung X
         let calibrationOffsetY = 0; // Kalibrierungsverschiebung Y
-        let distanceScale = 1; // Skalierungsfaktor für die Entfernungsmessung
 
         offscreenCanvas.width = 16000;
         offscreenCanvas.height = 16000;
@@ -215,7 +239,7 @@
                 };
                 fileReader.readAsArrayBuffer(file);
 
-                fileNameDisplay.textContent = `Hochgeladene Datei: ${file.name}`;
+                fileNameDisplay.textContent = `Datei: ${file.name}`;
             } else {
                 fileNameDisplay.textContent = 'Bitte eine gültige PDF-Datei hochladen.';
             }
@@ -240,6 +264,46 @@
             }
         }
 
+        function exportToExcel() {
+            if (points.length === 0 || measurementPoints.length === 0 || Object.keys(equations).length === 0) {
+                console.log('Keine Daten zum Exportieren vorhanden.');
+                return;
+            }
+
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet([]); // Erstelle ein leeres Blatt mit Arrays of Arrays (AOA)
+
+            // Füge die statischen Inhalte hinzu
+            ws['A6'] = { v: "Kabeltrasse:", s: { font: { sz: 14 } } };
+            ws['B6'] = { v: "", s: { font: { sz: 14 } } };
+            ws['A7'] = { v: "Teiltrasse", s: { font: { sz: 11 } } };
+            ws['B7'] = { v: "Näh-Abschnitt:", s: { font: { sz: 11 } } };
+            ws['C7'] = { v: "Beginn-km:", s: { font: { sz: 11 } } };
+            ws['D6'] = { v: "Kabeltrasse 1", s: { font: { sz: 14 } } };
+            ws['D7'] = { v: "Ende-km", s: { font: { sz: 11 } } };
+            ws['E7'] = { v: "Beginn-Abst.:", s: { font: { sz: 11 } } };
+            ws['F7'] = { v: "Ende-Abst.:", s: { font: { sz: 11 } } };
+            ws['G7'] = { v: "Kreuz-Abst.:", s: { font: { sz: 11 } } };
+
+            // Füge die dynamischen Inhalte basierend auf mouseData hinzu
+            mouseData.forEach((data, index) => {
+                const row = index + 8; // Startet bei Zeile 8
+
+                ws[`A${row}`] = { v: "1a", s: { font: { sz: 11 } } };
+                ws[`B${row}`] = { v: (index + 1).toString(), s: { font: { sz: 11 } } };
+                ws[`C${row}`] = { v: "", s: { font: { sz: 11 } } };
+                ws[`D${row}`] = { v: "", s: { font: { sz: 11 } } };
+                ws[`E${row}`] = { v: "", s: { font: { sz: 11 } } };
+                ws[`F${row}`] = { v: "", s: { font: { sz: 11 } } };
+                ws[`G${row}`] = { v: "", s: { font: { sz: 11 } } };
+            });
+
+            XLSX.utils.book_append_sheet(wb, ws, "1A-Daten");
+            const fileName = `mauskoordinaten_${fileCount++}.xlsx`;
+            XLSX.writeFile(wb, fileName);
+            clearValues();
+        }
+
         // Event Listener für Mausklicks auf dem Onscreen-Canvas
         onscreenCanvas.addEventListener('click', requestPointerLock);
 
@@ -259,7 +323,9 @@
                 scrollY = Math.max(0, Math.min(scrollY, offscreenCanvas.height - onscreenCanvas.height));
 
                 render();
-                drawCrosshair(onscreenCanvas.width / 2, onscreenCanvas.height / 2, onscreenCtx);
+                if (crosshairVisible) {
+                    drawCrosshair(onscreenCanvas.width / 2, onscreenCanvas.height / 2, onscreenCtx);
+                }
             }
         });
 
@@ -275,10 +341,9 @@
                     calculateDistances();
                 }
                 event.preventDefault();
-            } else if (event.code === 'Digit1') {
+            } else if (event.code === 'KeyC') {
                 calibrateMode = !calibrateMode;
-                info.innerHTML = calibrateMode ? 'Kalibriermodus aktiviert. Klicken Sie, um den Messpunkt zu kalibrieren.' : 'Kalibriermodus beendet.'
-                clearConsole();
+                info.innerHTML = calibrateMode ? 'Kalibrierungsmodus aktiviert.' : 'Kalibrierungsmodus beendet.';
                 event.preventDefault();
             }
         });
@@ -312,8 +377,8 @@
                 // Clear den Offscreen-Canvas und rendern die Punkte, Linien und Messungen neu
                 offscreenCtx.clearRect(0, 0, offscreenCanvas.width, offscreenCanvas.height);
                 await renderPDF();
-                points.forEach(point => drawPoint(point.x, point.y, 'red', offscreenCtx));
-                measurementPoints.forEach(point => drawPoint(point.x, point.y, 'green', offscreenCtx));
+                points.forEach((point, index) => drawPoint(point.x, point.y, 'red', offscreenCtx, startDistance + index * 0.1, true));
+                measurementPoints.forEach(point => drawPoint(point.x, point.y, 'green', offscreenCtx, false));
                 Object.values(equations).forEach(eq => drawLine({ x: eq.x1, y: eq.y1 }, { x: eq.x2, y: eq.y2 }, offscreenCtx));
                 calculateDistances();
 
@@ -322,7 +387,8 @@
                 info.innerHTML = 'Kalibrierung abgeschlossen.';
             } else if (recordingMode) {
                 points.push({ x, y });
-                drawPoint(x, y, 'red', offscreenCtx);
+                drawPoint(x, y, 'red', offscreenCtx, startDistance + currentIndex * 0.1, true);
+                currentIndex++;
                 info.innerHTML = `Punkt gespeichert: (${x}, ${y})`;
 
                 if (points.length >= 2) {
@@ -347,11 +413,19 @@
             render(true); // Neu rendern mit der Berücksichtigung der Kalibrierung
         }
 
-        function drawPoint(x, y, color, ctx) {
+        function drawPoint(x, y, color, ctx, dotDistance, distanceDisplay) {
             ctx.fillStyle = color;
             ctx.beginPath();
             ctx.arc(x, y, 5, 0, 2 * Math.PI);
             ctx.fill();
+            if (distanceDisplay) {
+                ctx.fillStyle = 'black';
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                console.log(dotDistance);
+                ctx.fillText(`${dotDistance.toFixed(1)} km`, x, y - 10);
+            }
         }
 
         function drawLine(p1, p2, ctx) {
@@ -444,6 +518,24 @@
 
         function clearConsole() {
             console.clear();
+        }
+
+        function clearValues() {
+            points = [];
+            measurementPoints = [];
+            equations = {};
+            equationCount = 0;
+            recordingMode = false;
+            measuringMode = false;
+            calibrateMode = false;
+            scrollX = 0;
+            scrollY = 0;
+            calibrationOffsetX = 0;
+            calibrationOffsetY = 0;
+            distanceScale = 1;
+            info.innerHTML = "Klicke auf das Canvas, um die Steuerung zu aktivieren. Bewege die Maus, um den Canvas zu verschieben.";
+            clearConsole();
+            console.log("Alle Werte wurden zurückgesetzt.");
         }
 
     </script>
