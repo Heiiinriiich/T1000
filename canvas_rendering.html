@@ -387,6 +387,7 @@
                 info.innerHTML = 'Kalibrierung abgeschlossen.';
             } else if (recordingMode) {
                 points.push({ x, y });
+                startDistance = getDistanceValue();
                 drawPoint(x, y, 'red', offscreenCtx, startDistance + currentIndex * 0.1, true);
                 currentIndex++;
                 info.innerHTML = `Punkt gespeichert: (${x}, ${y})`;
@@ -411,6 +412,14 @@
             }
 
             render(true); // Neu rendern mit der Berücksichtigung der Kalibrierung
+        }
+
+        function getDistanceValue() {
+            const inputValue = distanceInput.value;
+            const intValue = parseInt(inputValue, 10);
+
+            console.log('Startwert als Integer:', intValue);
+            return intValue;
         }
 
         function drawPoint(x, y, color, ctx, dotDistance, distanceDisplay) {
@@ -451,7 +460,7 @@
                 let minDistance = Infinity;
                 let closestEquation = '';
                 let closestPoint = { x: 0, y: 0 };
-
+    
                 for (const [key, eq] of Object.entries(equations)) {
                     const { m, n, x1, x2 } = eq;
                     if (point.x >= Math.min(x1, x2) && point.x <= Math.max(x1, x2)) {
@@ -473,8 +482,34 @@
                 console.log(`Minimale Entfernung des Punktes ${index + 1} (${point.x}, ${point.y}) zu Gleichung ${closestEquation}: ${distanceInMeters} Meter an Punkt (${closestPoint.x.toFixed(2)}, ${closestPoint.y.toFixed(2)})`);
                 info.innerHTML += `<br>Punkt ${index + 1}: Abstand zu ${closestEquation} = ${distanceInMeters} Meter`;
 
+                const equationIndex = parseInt(closestEquation.replace('y', ''), 10); // Index der Gleichung
+                console.log(equationIndex);
+                const startFunctionDistance = startDistance + (equationIndex - 1) * 0.1; // Startkilometer der aktuellen Funktion
+                const eq = equations[closestEquation];
+                const { x1, y1, x2, y2 } = eq;
+
+                // Berechne die Distanz entlang der Funktion zwischen den beiden Endpunkten
+                const functionLength = getDistance(x1, y1, x2, y2); // Distanz zwischen Start- und Endpunkt der Funktion in Metern
+
+                // Berechne den Abstand vom Startpunkt der Funktion zum closestPoint
+                const closestPointDistanceOnFunction = getDistance(x1, y1, closestPoint.x, closestPoint.y);
+
+                // Berechne den Anteil der Distanz des closestPoint an der gesamten Funktion
+                const percentageOfFunction = closestPointDistanceOnFunction / functionLength; // Anteil in Prozent
+
+                // Berechne den genauen Kilometer auf der Funktion
+                const closestPointDistanceOnTrack = startFunctionDistance + (percentageOfFunction * 0.1);
+
+                console.log(`Der nächste Punkt befindet sich bei Kilometer: ${closestPointDistanceOnTrack.toFixed(5)}`);
+
+                info.innerHTML += `<br>Punkt ${index + 1}: Abstand zu ${closestEquation} = ${distanceInMeters} Meter (Kilometer: ${closestPointDistanceOnTrack.toFixed(5)})`;
+
                 drawPerpendicularLine(point, closestPoint, offscreenCtx);
             });
+        }
+
+        function getDistance(x1, y1, x2, y2) {
+            return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
         }
 
         function drawPerpendicularLine(p1, p2, ctx) {
