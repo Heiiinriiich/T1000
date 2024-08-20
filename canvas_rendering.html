@@ -416,10 +416,10 @@
 
         function getDistanceValue() {
             const inputValue = distanceInput.value;
-            const intValue = parseInt(inputValue, 10);
+            const floatValue = parseFloat(inputValue, 10);
 
-            console.log('Startwert als Integer:', intValue);
-            return intValue;
+            console.log('Startwert als Integer:', floatValue);
+            return floatValue;
         }
 
         function drawPoint(x, y, color, ctx, dotDistance, distanceDisplay) {
