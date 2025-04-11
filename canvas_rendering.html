@@ -344,9 +344,15 @@
         let crosshairVisible = true;
         let calibrationOffsetX = 0; // Kalibrierungsverschiebung X
         let calibrationOffsetY = 0; // Kalibrierungsverschiebung Y
+        let startKm = [];
+        let endKm = [];
+        let startAbst = [];
+        let endAbst = [];
+        let pointCounter = 0;
+        let fileCount = 0;
 
-        offscreenCanvas.width = 16000;
-        offscreenCanvas.height = 16000;
+        offscreenCanvas.width = 8000;
+        offscreenCanvas.height = 8000;
         onscreenCanvas.width = container.clientWidth;
         onscreenCanvas.height = container.clientHeight;
 
@@ -391,14 +397,40 @@
         }
 
         function exportToExcel() {
-            if (points.length === 0 || measurementPoints.length === 0 || Object.keys(equations).length === 0) {
+            console.log(startKm);
+            const laenge = startKm.length;
+            const dataRows = [];
+
+            for (let i = 0; i < laenge; i++) {
+                dataRows.push({
+                    startKm: startKm[i] || "", // Sicherstellen, dass StartKm vorhanden ist
+                    endKm: endKm[i] || "",     // Sicherstellen, dass EndKm vorhanden ist
+                    startAbst: startAbst[i] || "", // Sicherstellen, dass StartAbst vorhanden ist
+                    endAbst: endAbst[i] || ""   // Sicherstellen, dass EndAbst vorhanden ist
+                });
+            } 
+            
+            console.log(dataRows);
+            
+            if (dataRows.length === 0) {
                 console.log('Keine Daten zum Exportieren vorhanden.');
                 return;
             }
 
             const wb = XLSX.utils.book_new();
-            const ws = XLSX.utils.aoa_to_sheet([]); // Erstelle ein leeres Blatt mit Arrays of Arrays (AOA)
-
+            const header = ["Teiltrasse", "Näh-Abschnitt", "Beginn-km", "Ende-km", "Beginn-Abst.", "Ende-Abst.", "Kreuz-Abst.", "Bodenleitf.", "Anz.-Gleise", "Oberleitung"];
+            const data = dataRows.map((row, index) => {
+            return [
+                `1a`, // Column A: "1a"
+                (index + 1).toString(), // Column B: incrementing number
+                row.startKm,
+                row.endKm,
+                row.startAbst,
+                row.endAbst,
+                "", "", "", "", ""
+            ];
+            });
+            const ws = XLSX.utils.aoa_to_sheet([header].concat(data));
             // Füge die statischen Inhalte hinzu
             ws['A6'] = { v: "Kabeltrasse:", s: { font: { sz: 14 } } };
             ws['B6'] = { v: "", s: { font: { sz: 14 } } };
@@ -410,24 +442,26 @@
             ws['E7'] = { v: "Beginn-Abst.:", s: { font: { sz: 11 } } };
             ws['F7'] = { v: "Ende-Abst.:", s: { font: { sz: 11 } } };
             ws['G7'] = { v: "Kreuz-Abst.:", s: { font: { sz: 11 } } };
+            ws['H7'] = { v: "Bodenleitf.:", s: { font: { sz: 11 } } };
+            ws['I7'] = { v: "Anz.-Gleise:", s: { font: { sz: 11 } } };  
+            ws['J7'] = { v: "Oberleitung:", s: { font: { sz: 11 } } };
 
             // Füge die dynamischen Inhalte basierend auf mouseData hinzu
-            mouseData.forEach((data, index) => {
-                const row = index + 8; // Startet bei Zeile 8
-
-                ws[`A${row}`] = { v: "1a", s: { font: { sz: 11 } } };
-                ws[`B${row}`] = { v: (index + 1).toString(), s: { font: { sz: 11 } } };
-                ws[`C${row}`] = { v: "", s: { font: { sz: 11 } } };
-                ws[`D${row}`] = { v: "", s: { font: { sz: 11 } } };
-                ws[`E${row}`] = { v: "", s: { font: { sz: 11 } } };
-                ws[`F${row}`] = { v: "", s: { font: { sz: 11 } } };
-                ws[`G${row}`] = { v: "", s: { font: { sz: 11 } } };
+            let rowIndex = 8; // Startet bei Zeile 8
+            dataRows.forEach((row) => {
+            ws[`A${rowIndex}`] = { v: "1a", s: { font: { sz: 11 } } };
+            ws[`B${rowIndex}`] = { v: rowIndex - 7, s: { font: { sz: 11 } } };
+            ws[`C${rowIndex}`] = { v: row.startKm, s: { font: { sz: 11 } } };
+            ws[`D${rowIndex}`] = { v: row.endKm, s: { font: { sz: 11 } } };
+            ws[`E${rowIndex}`] = { v: row.startAbst, s: { font: { sz: 11 } } };
+            ws[`F${rowIndex}`] = { v: row.endAbst, s: { font: { sz: 11 } } };
+            rowIndex++; // nächste Zeile
             });
 
             XLSX.utils.book_append_sheet(wb, ws, "1A-Daten");
             const fileName = `mauskoordinaten_${fileCount++}.xlsx`;
             XLSX.writeFile(wb, fileName);
-            clearValues();
+            /*clearValues();*/
         }
 
         // Event Listener für Mausklicks auf dem Onscreen-Canvas
@@ -589,6 +623,7 @@
                 let minDistance = Infinity;
                 let closestEquation = '';
                 let closestPoint = { x: 0, y: 0 };
+                pointCounter = index;
     
                 for (const [key, eq] of Object.entries(equations)) {
                     const { m, n, x1, x2 } = eq;
@@ -607,9 +642,9 @@
                     }
                 }
 
-                const distanceInMeters = (minDistance * distanceScale).toFixed(2); // Abstand in Metern
+                const distanceInMeters = (minDistance * distanceScale); // Abstand in Metern
                 console.log(`Minimale Entfernung des Punktes ${index + 1} (${point.x}, ${point.y}) zu Gleichung ${closestEquation}: ${distanceInMeters} Meter an Punkt (${closestPoint.x.toFixed(2)}, ${closestPoint.y.toFixed(2)})`);
-                info.innerHTML += `<br>Punkt ${index + 1}: Abstand zu ${closestEquation} = ${distanceInMeters} Meter`;
+                info.innerHTML += `<br>Punkt ${index + 1}: Abstand zu ${closestEquation} = ${distanceInMeters.toFixed(2)} Meter`;
 
                 const equationIndex = parseInt(closestEquation.replace('y', ''), 10); // Index der Gleichung
                 console.log(equationIndex);
@@ -631,9 +666,32 @@
 
                 console.log(`Der nächste Punkt befindet sich bei Kilometer: ${closestPointDistanceOnTrack.toFixed(5)}`);
 
-                info.innerHTML += `<br>Punkt ${index + 1}: Abstand zu ${closestEquation} = ${distanceInMeters} Meter (Kilometer: ${closestPointDistanceOnTrack.toFixed(5)})`;
+                info.innerHTML += `<br>Punkt ${index + 1}: Abstand zu ${closestEquation} = ${distanceInMeters.toFixed(2)} Meter (Kilometer: ${closestPointDistanceOnTrack.toFixed(5)})`;
 
                 drawPerpendicularLine(point, closestPoint, offscreenCtx);
+
+                if (pointCounter === 1) {
+                    // Wenn der PunktCounter größer als 1 ist, haben wir mindestens 2 Punkte
+                    // Den letzten Messpunkt als Endpunkt des aktuellen Teilstücks setzen
+                    endKm.push(closestPointDistanceOnTrack.toFixed(3));
+                    endAbst.push(distanceInMeters.toFixed(3));
+
+                } else if (pointCounter === 0) {
+                    // Wenn nur ein Punkt vorhanden ist, haben wir noch kein Teilstück
+                    // Initialisiere das erste Teilstück
+                    startKm.push(closestPointDistanceOnTrack.toFixed(3));
+                    startAbst.push(distanceInMeters.toFixed(3));
+                } else if (pointCounter > 1) {
+                    endKm.push(closestPointDistanceOnTrack.toFixed(3));
+                    endAbst.push(distanceInMeters.toFixed(3));
+                    startKm.push()
+                }
+
+                console.log(endKm);
+                console.log(startKm);
+                console.log(endAbst);   
+
+                pointCounter++;
             });
         }
 
@@ -697,6 +755,11 @@
             calibrationOffsetX = 0;
             calibrationOffsetY = 0;
             distanceScale = 1;
+            startKm = [];
+            endKm = [];
+            startAbst = [];
+            endAbst = [];
+            pointCounter = 0;
             info.innerHTML = "Klicke auf das Canvas, um die Steuerung zu aktivieren. Bewege die Maus, um den Canvas zu verschieben.";
             clearConsole();
             console.log("Alle Werte wurden zurückgesetzt.");
