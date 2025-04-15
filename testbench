@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Offscreen-Canvas mit Pointer Lock</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #cbd9ee;
+            --primary-hover: #c5cbd3;
+            --background-color: rgba(255, 255, 255, 0.6);
+            --blur-background: rgba(255, 255, 255, 0.8);
+            --font-color: #333;
+            --border-radius: 1vw;
+            --box-shadow: 0px 0.167px 0.83vw rgba(0, 0, 0, 0.15);
+            --font-family: 'Poppins', sans-serif;
+        }
+
+        .menu {
+            text-align: center;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-bottom: 1px solid #ccc;
+        }
+        .menu button {
+            margin: 0 10px;
+            padding: 10px 20px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        body {
+            margin: 0;
+            font-family: var(--font-family);
+            background: linear-gradient(120deg, #f0fffd, #dfe3fa);
+            color: var(--font-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+            justify-content: space-between;
+            align-items: center;
+            position: relative;
+        }
+
+        #canvas-container {
+            width: 90vw;  /* Initiale Breite von 90% */
+            height: 40vw;
+            top: 20vh;
+            overflow: hidden;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            position: absolute;  /* Ändern Sie die Position auf absolut */
+            left: 5%;  /* Die linke Position bleibt fest, z.B. 5% vom linken Rand */
+            cursor: crosshair;
+            transition: width 0.7s ease;
+        }
+
+        #onscreen-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 90vw;
+            height: 40vw;
+            object-fit: contain;
+        }
+
+        .button-container {
+            position: relative;
+            display: flex;
+            gap: 1vw;
+            flex-direction: column;
+            z-index: 1002;
+            padding: 1vw;
+            border-radius: var(--border-radius);
+            background: rgba(255, 255, 255, 0.1); /* Transparenz für den Container */
+            box-shadow: var(--box-shadow);
+            backdrop-filter: blur(10px);
+        }
+
+        button, .file-input-label {
+            display: inline-block;
+            padding: 0.5vw 1vw;
+            font-size: 0.9vw;
+            background-color: #cae3ec;
+            color: #333;
+            border: none;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            transition: background-color 0.3s;
+            font-family: var(--font-family);
+            cursor: pointer;
+            display: flex;
+            gap: 0.7vw;
+            align-items: center;
+        }
+
+        button:hover, .file-input-label:hover {
+            background-color: var(--primary-hover);
+        }
+
+        #legend {
+            position: relative;
+            font-size: 0.9vw;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            z-index: 1001;
+            padding: 0.5vw 0 0.5vw 0;
+            padding-left: 1vw;
+        }
+
+        #legend strong {
+            font-weight: 600;
+            font-size: 1.1vw;
+        }
+
+        #info {
+            padding: 1vw;
+            bottom: 2vh;
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            font-size: 0.7vw;
+            font-family: var(--font-family);
+            text-align: center;
+            position: absolute;  /* Ändern Sie die Position auf absolut */
+            left: 5%;  /* Die linke Position bleibt fest, z.B. 5% vom linken Rand */
+            transition: width 0.7s ease;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        #file-name {
+            font-size: 0.9vw;
+            color: var(--font-color);
+            font-family: var(--font-family);
+            align-self: center;
+        }
+
+        #distance-input {
+            width: 30%;
+            height: 100%;
+            backdrop-filter: blur(10px);
+            background: var(--blur-background);
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            font-family: var(--font-family);
+            text-align: center;
+        }
+
+        .sidebar {
+            background: linear-gradient(120deg, #f6ffff, #c5c5c5);
+            position: fixed;
+            right: -20%;
+            top: 0;
+            width: 20%;
+            height: 100%;
+            background-color: var(--blur-background);
+            box-shadow: var(--box-shadow);
+            border-radius: 12px 0 0 12px;
+            padding: 1vw;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            transition: right 0.7s ease;
+            z-index: 1001;
+        }
+
+        .sidebar.open {
+            right: 0;
+        }
+
+        /* Button zum Öffnen/Schließen der Seitenleiste */
+        .sidebar-toggle {
+            position: fixed;
+            right: 0;
+            top: 2vw;
+            padding: 1vw;
+            background-color: #cae3ec;
+            color: #333;
+            border-radius: 0vw 0 0 0;
+            box-shadow: var(--box-shadow);
+            cursor: pointer;
+            align-items: center;
+            z-index: 1000;
+            transition: right 0.7s ease;
+        }
+
+        .sidebar-toggle.open {
+            right: 20%;
+        }
+
+        .switch-container {
+            position: absolute;
+            display: flex;
+            flex-direction: column;
+            gap: 1vw;
+            top: 1.5vw;
+            left: 2vw;
+            
+        }
+
+        .switch {
+            display: flex;
+            align-items: center;
+            position: relative;
+            width: 4.375vw;
+            height: 1.5vw;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.1); /* Transparenz für den Container */
+            box-shadow: var(--box-shadow);
+            backdrop-filter: blur(10px);
+            transition: .4s;
+            border-radius: 1.5vw;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 1vw;
+            width: 1vw;
+            border-radius: 1vw;
+            left: 0.25vw;
+            bottom: 0.25vw;
+            background-color: rgb(100, 151, 151);
+            transition: transform 0.7s;
+        }
+
+        input:checked + .slider {
+            background-color: #afe6e1;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(2.875vw);
+        }
+
+        .switch-text {
+            margin-left: 5vw;
+            font-size: 0.7vw;
+
+        }
+
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.1/xlsx.full.min.js"></script>
+</head>
+
+<body>
+    <div class="switch-container">
+        <label class="switch">
+            <input type="checkbox" id="switch1">
+            <span class="slider"></span>
+            <span class="switch-text">Aufnahmemodus</span>
+        </label>
+        <label class="switch">
+            <input type="checkbox" id="switch2">
+            <span class="slider"></span>
+            <span class="switch-text">Messmodus</span>
+        </label>
+        <label class="switch">
+            <input type="checkbox" id="switch3">
+            <span class="slider"></span>
+            <span class="switch-text">Kalibriermodus</span>
+        </label>
+    </div>
+    <div class="container">
+        <div class="sidebar" id="sidebar">
+            <div class="button-container">
+                    <button onclick="exportToExcel()">
+                        <span class="material-icons" style="font-size: 1.3dvw;">file_download</span> DATEN EXPORTIEREN
+                    </button>
+                    <label for="file-input" class="file-input-label">
+                        <span class="material-icons" style="font-size: 1.3dvw;">upload</span> PDF HOCHLADEN
+                    </label>
+                    <input type="file" id="file-input" accept="application/pdf">
+                    <div id="file-name">Keine Datei hochgeladen</div>
+            </div>
+            <div id="legend">
+                <strong>LEGENDE:</strong><br>
+                ESC: Modus verlassen<br>
+                LEERTASTE: Gleismitte einlesen<br>
+                TAB: Messpunkte einlesen<br>
+                C: Kalibriermodus<br>
+            </div>
+            <div id="info">Klicke auf das Canvas, um die Steuerung zu aktivieren. Bewege die Maus, um den Canvas zu verschieben.</div>
+        </div>
+            <div class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()">
+                <span class="material-icons" style="font-size: 1.5dvw;">menu</span>
+            </div>
+            <div>
+                <label for="distance-input">Startwert in km:</label>
+                <input type="number" id="distance-input" value="0.0" step="0.1">
+            </div>
+            <div id="canvas-container">
+                <canvas id="onscreen-canvas"></canvas>
+            </div>
+    </div>
+<script>
+        const container = document.getElementById('canvas-container');
+        const onscreenCanvas = document.getElementById('onscreen-canvas');
+        const offscreenCanvas = document.createElement('canvas');
+        const onscreenCtx = onscreenCanvas.getContext('2d');
+        const offscreenCtx = offscreenCanvas.getContext('2d');
+        const info = document.getElementById('info');
+        const fileInput = document.getElementById('file-input');
+        const fileNameDisplay = document.getElementById('file-name');
+        const distanceInput = document.getElementById('distance-input');
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+
+        let pdfDocument; // Variable zur Speicherung des PDF-Dokuments
+        let points = [];
+        let measurementPoints = [];
+        let equations = {};
+        let equationCount = 0;
+        let recordingMode = false;
+        let measuringMode = false;
+        let calibrateMode = false;
+        let distanceDisplay = false;
+        let startDistance = 0; // Startdistanz nach Eingabe über Textfeld
+        let dotDistance = 0;
+        let currentIndex = 0;
+        let distanceScale = 1; // Skalierungsfaktor für die Entfernungsmessung
+        let distance = 0;
+        let scrollX = 0; // Scrollposition X
+        let scrollY = 0; // Scrollposition Y
+        let crosshairVisible = true;
+        let calibrationOffsetX = 0; // Kalibrierungsverschiebung X
+        let calibrationOffsetY = 0; // Kalibrierungsverschiebung Y
+        let startKm = [];
+        let endKm = [];
+        let startAbst = [];
+        let endAbst = [];
+        let pointCounter = 0;
+        let fileCount = 0;
+
+        offscreenCanvas.width = 8000;
+        offscreenCanvas.height = 8000;
+        onscreenCanvas.width = container.clientWidth;
+        onscreenCanvas.height = container.clientHeight;
+
+        fileInput.addEventListener('change', handleFileUpload);
+
+        async function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (file && file.type === 'application/pdf') {
+                const fileReader = new FileReader();
+                fileReader.onload = async function () {
+                    const pdfData = new Uint8Array(this.result);
+                    pdfDocument = await pdfjsLib.getDocument({ data: pdfData }).promise;
+
+                    await renderPDF();
+                    render();
+                };
+                fileReader.readAsArrayBuffer(file);
+
+                fileNameDisplay.textContent = `Datei: ${file.name}`;
+            } else {
+                fileNameDisplay.textContent = 'Bitte eine gültige PDF-Datei hochladen.';
+            }
+        };
+
+        async function renderPDF() {
+            if (pdfDocument) {
+                offscreenCtx.clearRect(0, 0, offscreenCanvas.width, offscreenCanvas.height); // Canvas löschen
+
+                for (let pageNumber = 1; pageNumber <= pdfDocument.numPages; pageNumber++) {
+                    const page = await pdfDocument.getPage(pageNumber);
+                    const viewport = page.getViewport({ scale: 3 });
+
+                    const renderContext = {
+                        canvasContext: offscreenCtx,
+                        viewport: viewport,
+                        transform: [1, 0, 0, 1, onscreenCanvas.width / 2, onscreenCanvas.height / 2 + (pageNumber - 1) * viewport.height] // Seiten untereinander anordnen
+                    };
+
+                    await page.render(renderContext).promise;
+                }
+            }
+        }
+
+        function exportToExcel() {
+            console.log(startKm);
+            const laenge = startKm.length;
+            const dataRows = [];
+
+            for (let i = 0; i < laenge; i++) {
+                dataRows.push({
+                    startKm: startKm[i] || "", // Sicherstellen, dass StartKm vorhanden ist
+                    endKm: endKm[i] || "",     // Sicherstellen, dass EndKm vorhanden ist
+                    startAbst: startAbst[i] || "", // Sicherstellen, dass StartAbst vorhanden ist
+                    endAbst: endAbst[i] || ""   // Sicherstellen, dass EndAbst vorhanden ist
+                });
+            } 
+            
+            console.log(dataRows);
+            
+            if (dataRows.length === 0) {
+                console.log('Keine Daten zum Exportieren vorhanden.');
+                return;
+            }
+
+            const wb = XLSX.utils.book_new();
+            const header = ["Teiltrasse", "Näh-Abschnitt", "Beginn-km", "Ende-km", "Beginn-Abst.", "Ende-Abst.", "Kreuz-Abst.", "Bodenleitf.", "Anz.-Gleise", "Oberleitung"];
+            const data = dataRows.map((row, index) => {
+            return [
+                `1a`, // Column A: "1a"
+                (index + 1).toString(), // Column B: incrementing number
+                row.startKm,
+                row.endKm,
+                row.startAbst,
+                row.endAbst,
+                "", "", "", "", ""
+            ];
+            });
+            const ws = XLSX.utils.aoa_to_sheet([header].concat(data));
+            // Füge die statischen Inhalte hinzu
+            ws['A6'] = { v: "Kabeltrasse:", s: { font: { sz: 14 } } };
+            ws['B6'] = { v: "", s: { font: { sz: 14 } } };
+            ws['A7'] = { v: "Teiltrasse", s: { font: { sz: 11 } } };
+            ws['B7'] = { v: "Näh-Abschnitt:", s: { font: { sz: 11 } } };
+            ws['C7'] = { v: "Beginn-km:", s: { font: { sz: 11 } } };
+            ws['D6'] = { v: "Kabeltrasse 1", s: { font: { sz: 14 } } };
+            ws['D7'] = { v: "Ende-km", s: { font: { sz: 11 } } };
+            ws['E7'] = { v: "Beginn-Abst.:", s: { font: { sz: 11 } } };
+            ws['F7'] = { v: "Ende-Abst.:", s: { font: { sz: 11 } } };
+            ws['G7'] = { v: "Kreuz-Abst.:", s: { font: { sz: 11 } } };
+            ws['H7'] = { v: "Bodenleitf.:", s: { font: { sz: 11 } } };
+            ws['I7'] = { v: "Anz.-Gleise:", s: { font: { sz: 11 } } };  
+            ws['J7'] = { v: "Oberleitung:", s: { font: { sz: 11 } } };
+
+            // Füge die dynamischen Inhalte basierend auf mouseData hinzu
+            let rowIndex = 8; // Startet bei Zeile 8
+            dataRows.forEach((row) => {
+            ws[`A${rowIndex}`] = { v: "1a", s: { font: { sz: 11 } } };
+            ws[`B${rowIndex}`] = { v: rowIndex - 7, s: { font: { sz: 11 } } };
+            ws[`C${rowIndex}`] = { v: row.startKm, s: { font: { sz: 11 } } };
+            ws[`D${rowIndex}`] = { v: row.endKm, s: { font: { sz: 11 } } };
+            ws[`E${rowIndex}`] = { v: row.startAbst, s: { font: { sz: 11 } } };
+            ws[`F${rowIndex}`] = { v: row.endAbst, s: { font: { sz: 11 } } };
+            rowIndex++; // nächste Zeile
+            });
+
+            XLSX.utils.book_append_sheet(wb, ws, "1A-Daten");
+            const fileName = `mauskoordinaten_${fileCount++}.xlsx`;
+            XLSX.writeFile(wb, fileName);
+            /*clearValues();*/
+        }
+
+        // Event Listener für Mausklicks auf dem Onscreen-Canvas
+        onscreenCanvas.addEventListener('click', requestPointerLock);
+
+        function requestPointerLock() {
+            onscreenCanvas.requestPointerLock();
+        }
+
+        // Mausbewegungen zum Scrollen verwenden
+        document.addEventListener('mousemove', (event) => {
+            if (document.pointerLockElement === onscreenCanvas) {
+                // Umkehren der Bewegungsrichtung
+                scrollX += event.movementX;
+                scrollY += event.movementY;
+
+                // Begrenzung der Scrollbewegung
+                scrollX = Math.max(0, Math.min(scrollX, offscreenCanvas.width - onscreenCanvas.width));
+                scrollY = Math.max(0, Math.min(scrollY, offscreenCanvas.height - onscreenCanvas.height));
+
+                render();
+                if (crosshairVisible) {
+                    drawCrosshair(onscreenCanvas.width / 2, onscreenCanvas.height / 2, onscreenCtx);
+                }
+            }
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.code === 'Space') {
+                recordingMode = !recordingMode;
+                toggleSwitch('switch1');
+                info.innerHTML = recordingMode ? 'Aufnahmemodus aktiviert.' : 'Aufnahmemodus beendet.';
+                event.preventDefault();
+            } else if (event.code === 'Tab') {
+                measuringMode = !measuringMode;
+                toggleSwitch('switch2');
+                info.innerHTML = measuringMode ? 'Messmodus aktiviert. Klicken Sie, um Messpunkte hinzuzufügen.' : 'Messmodus beendet. Berechnete Abstände werden angezeigt.';
+                if (!measuringMode) {
+                    calculateDistances();
+                }
+                event.preventDefault();
+            } else if (event.code === 'KeyC') {
+                calibrateMode = !calibrateMode;
+                toggleSwitch('switch3');
+                info.innerHTML = calibrateMode ? 'Kalibrierungsmodus aktiviert.' : 'Kalibrierungsmodus beendet.';
+                event.preventDefault();
+            }
+        });
+
+        async function handleClick(event) {
+            const x = scrollX + onscreenCanvas.width / 2; // Klickposition in Mitte des Canvas verschieben
+            const y = scrollY + onscreenCanvas.height / 2;
+
+            if (calibrateMode && points.length > 0) {
+                const dx = x - points[0].x;
+                const dy = y - points[0].y;
+
+                // Aktualisiere den Kalibrierungsoffset
+                calibrationOffsetX += dx;
+                calibrationOffsetY += dy;
+
+                // Verschiebe den ersten Punkt und alle anderen entsprechend
+                points = points.map(p => ({ x: p.x + dx, y: p.y + dy }));
+                measurementPoints = measurementPoints.map(p => ({ x: p.x + dx, y: p.y + dy }));
+
+                // Rechne die Gleichungen neu
+                equationCount = 0;
+                equations = {};
+                for (let i = 1; i < points.length; i++) {
+                    calculateAndStoreLineEquation(points[i - 1], points[i]);
+                }
+
+                // PDF erneut rendern, unter Berücksichtigung der Kalibrierung
+                await renderPDF();
+
+                // Clear den Offscreen-Canvas und rendern die Punkte, Linien und Messungen neu
+                offscreenCtx.clearRect(0, 0, offscreenCanvas.width, offscreenCanvas.height);
+                await renderPDF();
+                points.forEach((point, index) => drawPoint(point.x, point.y, 'red', offscreenCtx, startDistance + index * 0.1, true));
+                measurementPoints.forEach(point => drawPoint(point.x, point.y, 'purple', offscreenCtx, false));
+                Object.values(equations).forEach(eq => drawLine({ x: eq.x1, y: eq.y1 }, { x: eq.x2, y: eq.y2 }, offscreenCtx));
+                calculateDistances();
+
+                // Deaktiviere den Kalibriermodus nach der Kalibrierung
+                calibrateMode = false;
+                info.innerHTML = 'Kalibrierung abgeschlossen.';
+            } else if (recordingMode) {
+                points.push({ x, y });
+                startDistance = getDistanceValue();
+                drawPoint(x, y, 'red', offscreenCtx, startDistance + currentIndex * 0.1, true);
+                currentIndex++;
+                info.innerHTML = `Punkt gespeichert: (${x}, ${y})`;
+
+                if (points.length >= 2) {
+                    const p1 = points[points.length - 2];
+                    const p2 = points[points.length - 1];
+                    drawLine(p1, p2, offscreenCtx);
+                    calculateAndStoreLineEquation(p1, p2);
+
+                    // Kalibrierung basierend auf den ersten zwei Punkten
+                    if (points.length === 2) {
+                        const pixelDistance = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+                        distanceScale = 100 / pixelDistance; // Annahme: Die Entfernung zwischen den Punkten ist 100 Meter
+                        info.innerHTML += `<br>Kalibrierung abgeschlossen: 1 Pixel = ${distanceScale.toFixed(4)} Meter`;
+                    }
+                }
+            } else if (measuringMode) {
+                measurementPoints.push({ x, y });
+                drawPoint(x, y, 'purple', offscreenCtx);
+                info.innerHTML = `Messpunkt gespeichert: (${x}, ${y})`;
+            }
+
+            render(true); // Neu rendern mit der Berücksichtigung der Kalibrierung
+        }
+
+        function getDistanceValue() {
+            const inputValue = distanceInput.value;
+            const floatValue = parseFloat(inputValue, 10);
+
+            console.log('Startwert als Integer:', floatValue);
+            return floatValue;
+        }
+
+        function drawPoint(x, y, color, ctx, dotDistance, distanceDisplay) {
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(x, y, 5, 0, 2 * Math.PI);
+            ctx.fill();
+            if (distanceDisplay) {
+                ctx.fillStyle = 'black';
+                ctx.font = '12px Poppins';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                console.log(dotDistance);
+                ctx.fillText(`${dotDistance.toFixed(1)} km`, x, y - 10);
+            }
+        }
+
+        function drawLine(p1, p2, ctx) {
+            ctx.strokeStyle = 'red';
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.stroke();
+        }
+
+        function calculateAndStoreLineEquation(p1, p2) {
+            const m = ((p2.y - p1.y) / (p2.x - p1.x)).toFixed(2);
+            const n = (p1.y - m * p1.x).toFixed(2);
+            equations[`y${++equationCount}`] = { m: parseFloat(m), n: parseFloat(n), x1: p1.x, x2: p2.x, y1: p1.y, y2: p2.y };
+
+            const equationText = `y${equationCount} = ${m}x + ${n}`;
+            console.log(`Gleichung ${equationCount}: ${equationText}`);
+            info.innerHTML = `Gleichung ${equationCount}: ${equationText}`;
+        }
+
+        function calculateDistances() {
+            measurementPoints.forEach((point, index) => {
+                let minDistance = Infinity;
+                let closestEquation = '';
+                let closestPoint = { x: 0, y: 0 };
+                pointCounter = index;
+    
+                for (const [key, eq] of Object.entries(equations)) {
+                    const { m, n, x1, x2 } = eq;
+                    if (point.x >= Math.min(x1, x2) && point.x <= Math.max(x1, x2)) {
+                        const perpendicularX = (point.x + m * point.y - m * n) / (m * m + 1);
+                        const perpendicularY = (m * point.x + (m * m * point.y) + n) / (m * m + 1);
+
+                        if (perpendicularX >= Math.min(x1, x2) && perpendicularX <= Math.max(x1, x2)) {
+                            const distance = Math.abs(m * point.x - point.y + n) / Math.sqrt(m * m + 1);
+                            if (distance < minDistance) {
+                                minDistance = distance;
+                                closestEquation = key;
+                                closestPoint = { x: perpendicularX, y: perpendicularY };
+                            }
+                        }
+                    }
+                }
+
+                const distanceInMeters = (minDistance * distanceScale); // Abstand in Metern
+                console.log(`Minimale Entfernung des Punktes ${index + 1} (${point.x}, ${point.y}) zu Gleichung ${closestEquation}: ${distanceInMeters} Meter an Punkt (${closestPoint.x.toFixed(2)}, ${closestPoint.y.toFixed(2)})`);
+                info.innerHTML += `<br>Punkt ${index + 1}: Abstand zu ${closestEquation} = ${distanceInMeters.toFixed(2)} Meter`;
+
+                const equationIndex = parseInt(closestEquation.replace('y', ''), 10); // Index der Gleichung
+                console.log(equationIndex);
+                const startFunctionDistance = startDistance + (equationIndex - 1) * 0.1; // Startkilometer der aktuellen Funktion
+                const eq = equations[closestEquation];
+                const { x1, y1, x2, y2 } = eq;
+
+                // Berechne die Distanz entlang der Funktion zwischen den beiden Endpunkten
+                const functionLength = getDistance(x1, y1, x2, y2); // Distanz zwischen Start- und Endpunkt der Funktion in Metern
+
+                // Berechne den Abstand vom Startpunkt der Funktion zum closestPoint
+                const closestPointDistanceOnFunction = getDistance(x1, y1, closestPoint.x, closestPoint.y);
+
+                // Berechne den Anteil der Distanz des closestPoint an der gesamten Funktion
+                const percentageOfFunction = closestPointDistanceOnFunction / functionLength; // Anteil in Prozent
+
+                // Berechne den genauen Kilometer auf der Funktion
+                const closestPointDistanceOnTrack = startFunctionDistance + (percentageOfFunction * 0.1);
+
+                console.log(`Der nächste Punkt befindet sich bei Kilometer: ${closestPointDistanceOnTrack.toFixed(5)}`);
+
+                info.innerHTML += `<br>Punkt ${index + 1}: Abstand zu ${closestEquation} = ${distanceInMeters.toFixed(2)} Meter (Kilometer: ${closestPointDistanceOnTrack.toFixed(5)})`;
+
+                drawPerpendicularLine(point, closestPoint, offscreenCtx);
+
+                if (pointCounter === 1) {
+                    // Wenn der PunktCounter größer als 1 ist, haben wir mindestens 2 Punkte
+                    // Den letzten Messpunkt als Endpunkt des aktuellen Teilstücks setzen
+                    endKm.push(closestPointDistanceOnTrack.toFixed(3));
+                    endAbst.push(distanceInMeters.toFixed(3));
+
+                } else if (pointCounter === 0) {
+                    // Wenn nur ein Punkt vorhanden ist, haben wir noch kein Teilstück
+                    // Initialisiere das erste Teilstück
+                    startKm.push(closestPointDistanceOnTrack.toFixed(3));
+                    startAbst.push(distanceInMeters.toFixed(3));
+                } else if (pointCounter > 1) {
+                    endKm.push(closestPointDistanceOnTrack.toFixed(3));
+                    endAbst.push(distanceInMeters.toFixed(3));
+                    startKm.push()
+                }
+
+                console.log(endKm);
+                console.log(startKm);
+                console.log(endAbst);   
+
+                pointCounter++;
+            });
+        }
+
+        function getDistance(x1, y1, x2, y2) {
+            return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+        }
+
+        function drawPerpendicularLine(p1, p2, ctx) {
+            ctx.strokeStyle = 'purple';
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.stroke();
+        }
+
+        function drawCrosshair(x, y, ctx) {
+            ctx.strokeStyle = 'black';
+            ctx.beginPath();
+            ctx.moveTo(x - 10, y);
+            ctx.lineTo(x + 10, y);
+            ctx.moveTo(x, y - 10);
+            ctx.lineTo(x, y + 10);
+            ctx.stroke();
+        }
+
+        function render(adjusted = false) {
+            onscreenCtx.clearRect(0, 0, onscreenCanvas.width, onscreenCanvas.height);
+
+            // Zeichne das verschobene Offscreen-Canvas
+            const offsetX = adjusted ? calibrationOffsetX : 0;
+            const offsetY = adjusted ? calibrationOffsetY : 0;
+
+            onscreenCtx.drawImage(offscreenCanvas, scrollX + offsetX, scrollY + offsetY, onscreenCanvas.width, onscreenCanvas.height, 0, 0, onscreenCanvas.width, onscreenCanvas.height);
+
+            // Zeichne das Crosshair an der Position des virtuellen Cursors
+            if (document.pointerLockElement === onscreenCanvas && crosshairVisible) {
+                drawCrosshair(onscreenCanvas.width / 2, onscreenCanvas.height / 2, onscreenCtx);
+            }
+        }
+
+        // Initiales Rendern
+        render();
+
+        // Event Listener für Mausklicks auf dem Onscreen-Canvas zum Zeichnen von Punkten
+        onscreenCanvas.addEventListener('click', handleClick);
+
+        function clearConsole() {
+            console.clear();
+        }
+
+        function clearValues() {
+            points = [];
+            measurementPoints = [];
+            equations = {};
+            equationCount = 0;
+            recordingMode = false;
+            measuringMode = false;
+            calibrateMode = false;
+            scrollX = 0;
+            scrollY = 0;
+            calibrationOffsetX = 0;
+            calibrationOffsetY = 0;
+            distanceScale = 1;
+            startKm = [];
+            endKm = [];
+            startAbst = [];
+            endAbst = [];
+            pointCounter = 0;
+            info.innerHTML = "Klicke auf das Canvas, um die Steuerung zu aktivieren. Bewege die Maus, um den Canvas zu verschieben.";
+            clearConsole();
+            console.log("Alle Werte wurden zurückgesetzt.");
+        }
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const sidebarToggle = document.getElementById('sidebar-toggle');
+            const canvasContainer = document.getElementById('canvas-container');
+            const info = document.getElementById('info');
+
+            sidebar.classList.toggle('open');
+            sidebarToggle.classList.toggle('open');
+
+            if (sidebar.classList.contains('open')) {
+                // Sidebar ist geöffnet, verkleinere die Breite des Canvas und Info
+                canvasContainer.style.width = '70%'; // Verkleinert auf 70% der Gesamtbreite
+                info.style.width = '70%';
+            } else {
+                // Sidebar ist geschlossen, setze die Breite zurück auf 90%
+                canvasContainer.style.width = '90%';
+                info.style.width = '90%';
+            }
+        }
+
+        function toggleSwitch(switchId) {
+            const checkbox = document.getElementById(switchId);
+            if (checkbox) {
+                checkbox.checked = !checkbox.checked;
+            }
+        }
+
+
+    </script>
+
+    </div>
+
+    <!-- Seite: Excel Bearbeitung -->
+    <div id="page-excel" class="page">
+    <h2>🧾 Excel Eingabemaske</h2>
+
+    <!-- Tabs -->
+    <div class="sheet-tabs">
+        <button onclick="showSheet('P-Daten')">P-Daten</button>
+        <button onclick="showSheet('1A-Daten')">1A-Daten</button>
+    </div>
+
+    <!-- Inhalt P-Daten -->
+    <div id="sheet-P-Daten" class="sheet-content sheet-active">
+        <table id="pDatenTable">
+        <tr><td>Programmversion:</td><td><input type="text" value="VERSION V1.5" /></td></tr>
+        <tr><td>Datum:</td><td><input type="date" /></td></tr>
+        <tr><td>Uhrzeit:</td><td><input type="time" /></td></tr>
+        <tr><td>Bauvorhaben:</td><td><input type="text" /></td></tr>
+        <tr><td>Kabel/Verbindung:</td><td><input type="text" /></td></tr>
+        <tr><td>Auftragsnummer:</td><td><input type="text" /></td></tr>
+        <tr><td>Bearbeiter:</td><td><input type="text" /></td></tr>
+        <tr><td>Plan-Name:</td><td><input type="text" /></td></tr>
+        </table>
+    </div>
+
+    <!-- Inhalt 1A-Daten -->
+    <div id="sheet-1A-Daten" class="sheet-content">
+        <table id="data1ATable">
+        <tr>
+            <th>Teiltrasse</th><th>Abschnitt</th><th>Start-km</th><th>Ende-km</th><th>Start-Abst.</th><th>Ende-Abst.</th>
+        </tr>
+        <tr>
+            <td><input type="text" value="1a" /></td>
+            <td><input type="number" value="1" /></td>
+            <td><input type="text" /></td>
+            <td><input type="text" /></td>
+            <td><input type="text" /></td>
+            <td><input type="text" /></td>
+        </tr>
+        <!-- weitere Zeilen kannst du dynamisch hinzufügen -->
+        </table>
+    </div>
+
+    <br>
+    <button onclick="exportToExcel()">💾 Exportieren</button>
+    </div>
+</body>
+
+</html>
