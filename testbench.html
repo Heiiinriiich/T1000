@@ -1,0 +1,1752 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Offscreen-Canvas mit Pointer Lock</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #cbd9ee;
+            --primary-hover: #c5cbd3;
+            --background-color: rgba(255, 255, 255, 0.6);
+            --blur-background: rgba(255, 255, 255, 0.8);
+            --font-color: #333;
+            --border-radius: 1vw;
+            --box-shadow: 0px 0.167px 0.83vw rgba(0, 0, 0, 0.15);
+            --font-family: 'Poppins', sans-serif;
+        }
+
+        .menu {
+            display: flex; /* Flexbox aktivieren */
+            justify-content: center;
+            text-align: center;
+            height: 5vh;
+            gap: 10px;
+        }
+
+        .menu bar {
+            margin: 10px;
+            padding: 5px 10px;
+            font-weight: bold;
+	    text-align: center;
+            border: none;
+            border-radius: var(--border-radius);
+            transition: background-color 0.3s;
+            cursor: pointer;
+        }
+
+	bar:hover {
+            background-color: var(--primary-hover);
+        }
+
+	.menu-input {
+            font-size: 0.7vw;
+            font-family: var(--font-family);
+        }
+
+        body {
+            margin: 0;
+            font-family: var(--font-family);
+            background: linear-gradient(180deg, #fafbff, #c0c0c0);
+            color: var(--font-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            height: 100vh;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+            justify-content: space-between;
+            align-items: center;
+            position: relative;
+        }
+
+        #canvas-container {
+            width: 90vw;  /* Initiale Breite von 90% */
+            height: 40vw;
+            top: 20vh;
+            overflow: hidden;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            position: fixed;  /* Ändern Sie die Position auf absolut */
+            left: 5%;  /* Die linke Position bleibt fest, z.B. 5% vom linken Rand */
+            cursor: crosshair;
+            transition: width 0.7s ease;
+        }
+
+        #onscreen-canvas {
+            position: relative;
+            top: 0;
+            left: 0;
+            width: 90vw;
+            height: 40vw;
+            object-fit: contain;
+        }
+
+        .button-container {
+            position: relative;
+            display: flex;
+            gap: 1vw;
+            flex-direction: column;
+            z-index: 1002;
+            padding: 1vw;
+            border-radius: var(--border-radius);
+            background: rgba(255, 255, 255, 0.1); /* Transparenz für den Container */
+            box-shadow: var(--box-shadow);
+            backdrop-filter: blur(10px);
+        }
+
+        button, .file-input-label {
+            display: inline-block;
+            padding: 0.5vw 1vw;
+            font-size: 0.9vw;
+            background-color: #c0c0c0;
+            color: #333;
+            border: none;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            transition: background-color 0.3s;
+            font-family: var(--font-family);
+            cursor: pointer;
+            display: flex;
+            gap: 0.7vw;
+            align-items: center;
+        }
+
+        button:hover, .file-input-label:hover {
+            background-color: var(--primary-hover);
+        }
+
+        #legend {
+            position: relative;
+            font-size: 0.9vw;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            z-index: 1001;
+            padding: 0.5vw 0 0.5vw 0;
+            padding-left: 1vw;
+        }
+
+        #legend strong {
+            font-weight: 600;
+            font-size: 1.1vw;
+        }
+
+        #info {
+            padding: 1vw;
+            bottom: 2vh;
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            font-size: 0.7vw;
+            font-family: var(--font-family);
+            text-align: center;
+            position: absolute;  /* Ändern Sie die Position auf absolut */
+            left: 5%;  /* Die linke Position bleibt fest, z.B. 5% vom linken Rand */
+            transition: width 0.7s ease;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        #file-name {
+            font-size: 0.9vw;
+            color: var(--font-color);
+            font-family: var(--font-family);
+            align-self: center;
+        }
+
+        #distance-input {
+            width: 30%;
+            height: 100%;
+            backdrop-filter: blur(10px);
+            background: var(--blur-background);
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            font-family: var(--font-family);
+            text-align: center;
+        }
+
+        .sidebar {
+            background: linear-gradient(120deg, #e4e4e4, #c5c5c5);
+            position: fixed;
+            right: -20%;
+            top: 0;
+            width: 20%;
+            height: 100%;
+            background-color: var(--blur-background);
+            box-shadow: var(--box-shadow);
+            border-radius: 12px 0 0 12px;
+            padding: 1vw;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            transition: right 0.7s ease;
+            z-index: 1001;
+        }
+
+        .sidebar.open {
+            right: 0;
+        }
+
+        /* Button zum Öffnen/Schließen der Seitenleiste */
+        .sidebar-toggle {
+            position: fixed;
+            right: 0;
+            top: 2vw;
+            padding: 1vw;
+            background-color: #c0c0c0;
+            color: #333;
+            border-radius: 0vw 0 0 0;
+            box-shadow: var(--box-shadow);
+            cursor: pointer;
+            align-items: center;
+            z-index: 1000;
+            transition: right 0.7s ease;
+        }
+
+        .sidebar-toggle.open {
+            right: 20%;
+        }
+
+        .switch-container {
+            position: absolute;
+            display: flex;
+            flex-direction: column;
+            gap: 1vw;
+            top: 1.5vw;
+            left: 2vw;
+            
+        }
+
+        .switch {
+            display: flex;
+            align-items: center;
+            position: relative;
+            width: 4.375vw;
+            height: 1.5vw;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.1); /* Transparenz für den Container */
+            box-shadow: var(--box-shadow);
+            backdrop-filter: blur(10px);
+            transition: .4s;
+            border-radius: 1.5vw;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 1vw;
+            width: 1vw;
+            border-radius: 1vw;
+            left: 0.25vw;
+            bottom: 0.25vw;
+            background-color: rgb(53, 53, 53);
+            transition: transform 0.7s;
+        }
+
+        input:checked + .slider {
+            background-color: #c0c0c0;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(2.875vw);
+        }
+
+        .switch-text {
+            margin-left: 5vw;
+            font-size: 0.7vw;
+
+        }
+
+        .page {
+        display: none;
+        padding: 20px;
+        }
+        .active {
+        display: block;
+        }
+
+        /* Sheet Tabs */
+        .sheet-tabs {
+        margin-top: 20px;
+        display: flex;
+        justify-content: center;
+        }
+        .sheet-tabs button {
+        margin: 0 5px;
+        padding: 8px 16px;
+        cursor: pointer;
+        }
+
+        .sheet-content {
+        display: none;
+        margin-top: 20px;
+        }
+
+        .sheet-active {
+        display: block;
+        }
+
+        table {
+        width: 100%;
+        border-collapse: collapse;
+        }
+        td {
+        border: 1px solid #ccc;
+        padding: 4px;
+        }
+        input {
+        width: 100%;
+        box-sizing: border-box;
+        }
+
+        #dataPTable {
+            width: 35.3vw; /* Standardbreite */
+            font-size: calc(0.8vw); /* Feste Schriftgröße */
+            margin: 0 auto; /* Zentriert die Tabelle */
+            border-collapse: collapse;
+        }
+
+        #dataPTable td, #dataPTable th {
+            padding: 4px;
+            text-align: left;
+        }
+
+        #dataSTable {
+            width: 90vw; /* Tabelle nimmt 90% der Breite des Viewports ein */
+            max-width: 100%; /* Verhindert, dass die Tabelle breiter als der Bildschirm wird */
+            margin: 0 auto; /* Zentriert die Tabelle horizontal */
+            border-collapse: collapse; /* Entfernt doppelte Rahmen */
+            font-size: calc(0.7vw); /* Schriftgröße passt sich dynamisch an die Breite an */
+        }
+
+        #dataSTable td, #dataSTable th {
+            text-align: center; /* Zentriert den Text */
+            word-wrap: break-word; /* Zeilenumbruch für lange Inhalte */
+        }
+
+        input[type="text"],
+        input[type="date"],
+        input[type="time"],
+        input[type="number"],
+        select {
+            font-size: calc(0.6vw); /* Verkleinert die Schriftgröße */
+            padding: 4px; /* Passt den Innenabstand an */
+            height: auto; /* Passt die Höhe automatisch an die Schriftgröße an */
+            box-sizing: border-box; /* Stellt sicher, dass Padding und Border berücksichtigt werden */
+            border: none; /* Rahmenbreite und -farbe */
+            width: 100%; /* Volle Breite der Zelle */
+            font-weight: bold; /* Fettdruck für den Text */
+        }
+
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.1/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.min.js"></script>
+
+</head>
+
+<body>
+    <!-- Menüleiste -->
+  <div class="menu">
+    <bar onclick="switchPage('main')">
+    <span class="material-icons" style="font-size: 1.3dvw;">sync</span>
+    </bar>
+    <bar onclick="switchPage('berechnung')">
+	<span class="material-icons" style="font-size: 1.3dvw;">timeline</span>
+    </bar>
+    <bar onclick="switchPage('excel')">
+	<span class="material-icons" style="font-size: 1.3dvw;">dataset</span>
+    </bar>
+  </div>
+
+  <div id="page-berechnung" class="page active">
+    <div class="switch-container">
+        <label class="switch">
+            <input type="checkbox" id="switch1">
+            <span class="slider"></span>
+            <span class="switch-text">Aufnahmemodus</span>
+        </label>
+        <label class="switch">
+            <input type="checkbox" id="switch2">
+            <span class="slider"></span>
+            <span class="switch-text">Messmodus</span>
+        </label>
+        <label class="switch">
+            <input type="checkbox" id="switch3">
+            <span class="slider"></span>
+            <span class="switch-text">Kalibriermodus</span>
+        </label>
+    </div>
+    <div class="container">
+        <div class="sidebar" id="sidebar">
+            <div class="button-container">
+		    <div class="menu-input">
+        		<label for="distance-input">Startwert:</label>
+        		<input type="number" id="distance-input" value="0.0" step="0.1">
+    		    </div>
+                    <button onclick="exportToExcel()">
+                        <span class="material-icons" style="font-size: 1.3dvw;">file_download</span> DATEN EXPORTIEREN
+                    </button>
+                    <label for="file-input" class="file-input-label">
+                        <span class="material-icons" style="font-size: 1.3dvw;">upload</span> PDF HOCHLADEN
+                    </label>
+                    <input type="file" id="file-input" accept="application/pdf">
+                    <div id="file-name">Keine Datei hochgeladen</div>
+            </div>
+            <div id="legend">
+                <strong>LEGENDE:</strong><br>
+                ESC: Modus verlassen<br>
+                LEERTASTE: Gleismitte einlesen<br>
+                TAB: Messpunkte einlesen<br>
+                C: Kalibriermodus<br>
+            </div>
+            <div id="info">Klicke auf das Canvas, um die Steuerung zu aktivieren. Bewege die Maus, um den Canvas zu verschieben.</div>
+        </div>
+            <div class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()">
+                <span class="material-icons" style="font-size: 1.5dvw;">menu</span>
+            </div>
+            <div id="canvas-container">
+                <canvas id="onscreen-canvas"></canvas>
+            </div>
+    </div>
+<script>
+        const container = document.getElementById('canvas-container');
+        const onscreenCanvas = document.getElementById('onscreen-canvas');
+        const offscreenCanvas = document.createElement('canvas');
+        const onscreenCtx = onscreenCanvas.getContext('2d');
+        const offscreenCtx = offscreenCanvas.getContext('2d');
+        const info = document.getElementById('info');
+        const fileInput = document.getElementById('file-input');
+        const fileNameDisplay = document.getElementById('file-name');
+        const distanceInput = document.getElementById('distance-input');
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+
+        let pdfDocument; // Variable zur Speicherung des PDF-Dokuments
+        let measurementPoints = [];
+        let recordingMode = false;
+        let measuringMode = false;
+        let calibrateMode = false;
+        let distanceDisplay = false;
+        let startDistance = 0; // Startdistanz nach Eingabe über Textfeld
+        let dotDistance = 0;
+        let currentIndex = 0;
+        let distanceScale = 1; // Skalierungsfaktor für die Entfernungsmessung
+        let distance = 0;
+        let scrollX = 0; // Scrollposition X
+        let scrollY = 0; // Scrollposition Y
+        let crosshairVisible = true;
+        let calibrationOffsetX = 0; // Kalibrierungsverschiebung X
+        let calibrationOffsetY = 0; // Kalibrierungsverschiebung Y
+        let startKm = [];
+        let endKm = [];
+        let startAbst = [];
+        let endAbst = [];
+        let exportData = []; // Array für die Exportdaten
+        let pointCounter = 0;
+        let fileCount = 0;
+        let allTracks = [[]];  // Enthält alle Strecken
+        let activeTrackIndex = 0;  // Zeigt auf die aktive Strecke
+        let equationsPerTrack = [{}]; // Gleichungen für jede Strecke
+        let cableTracks = [[]];
+        let activeCableIndex = 0; // Zeigt auf die aktive Kabelstrecke
+
+
+        offscreenCanvas.width = 8000;
+        offscreenCanvas.height = 8000;
+        onscreenCanvas.width = container.clientWidth;
+        onscreenCanvas.height = container.clientHeight;
+
+        fileInput.addEventListener('change', handleFileUpload);
+
+        async function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (file && file.type === 'application/pdf') {
+                const fileReader = new FileReader();
+                fileReader.onload = async function () {
+                    const pdfData = new Uint8Array(this.result);
+                    pdfDocument = await pdfjsLib.getDocument({ data: pdfData }).promise;
+
+                    await renderPDF();
+                    render();
+                };
+                fileReader.readAsArrayBuffer(file);
+
+                fileNameDisplay.textContent = `Datei: ${file.name}`;
+            } else {
+                fileNameDisplay.textContent = 'Bitte eine gültige PDF-Datei hochladen.';
+            }
+        };
+
+        async function renderPDF() {
+            if (pdfDocument) {
+                offscreenCtx.clearRect(0, 0, offscreenCanvas.width, offscreenCanvas.height); // Canvas löschen
+
+                for (let pageNumber = 1; pageNumber <= pdfDocument.numPages; pageNumber++) {
+                    const page = await pdfDocument.getPage(pageNumber);
+                    const viewport = page.getViewport({ scale: 3 });
+
+                    const renderContext = {
+                        canvasContext: offscreenCtx,
+                        viewport: viewport,
+                        transform: [1, 0, 0, 1, onscreenCanvas.width / 2, onscreenCanvas.height / 2 + (pageNumber - 1) * viewport.height] // Seiten untereinander anordnen
+                    };
+
+                    await page.render(renderContext).promise;
+                }
+            }
+        }
+
+        // Event Listener für Mausklicks auf dem Onscreen-Canvas
+        onscreenCanvas.addEventListener('click', requestPointerLock);
+
+        function requestPointerLock() {
+            onscreenCanvas.requestPointerLock();
+        }
+
+        // Mausbewegungen zum Scrollen verwenden
+        document.addEventListener('mousemove', (event) => {
+            if (document.pointerLockElement === onscreenCanvas) {
+                // Umkehren der Bewegungsrichtung
+                scrollX += event.movementX;
+                scrollY += event.movementY;
+
+                // Begrenzung der Scrollbewegung
+                scrollX = Math.max(0, Math.min(scrollX, offscreenCanvas.width - onscreenCanvas.width));
+                scrollY = Math.max(0, Math.min(scrollY, offscreenCanvas.height - onscreenCanvas.height));
+
+                render();
+                if (crosshairVisible) {
+                    drawCrosshair(onscreenCanvas.width / 2, onscreenCanvas.height / 2, onscreenCtx);
+                }
+            }
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.code === 'Space') {
+                recordingMode = !recordingMode;
+                toggleSwitch('switch1');
+                info.innerHTML = recordingMode ? 'Aufnahmemodus aktiviert.' : 'Aufnahmemodus beendet.';
+                event.preventDefault();
+            } else if (event.code === 'Tab') {
+                measuringMode = !measuringMode;
+                toggleSwitch('switch2');
+                info.innerHTML = measuringMode ? 'Messmodus aktiviert. Klicken Sie, um Messpunkte hinzuzufügen.' : 'Messmodus beendet. Berechnete Abstände werden angezeigt.';
+                if (!measuringMode) {
+                    calculateDistances(cableTracks[activeCableIndex], equationsPerTrack[activeTrackIndex]);
+                }
+                event.preventDefault();
+            } else if (event.code === 'KeyC') {
+                calibrateMode = !calibrateMode;
+                toggleSwitch('switch3');
+                info.innerHTML = calibrateMode ? 'Kalibrierungsmodus aktiviert.' : 'Kalibrierungsmodus beendet.';
+                event.preventDefault();
+            }
+        });
+
+        async function handleClick(event) {
+            const x = scrollX + onscreenCanvas.width / 2; // Klickposition in Mitte des Canvas verschieben
+            const y = scrollY + onscreenCanvas.height / 2;
+
+            if (calibrateMode && points.length > 0) {
+                const dx = x - points[0].x;
+                const dy = y - points[0].y;
+
+                // Aktualisiere den Kalibrierungsoffset
+                calibrationOffsetX += dx;
+                calibrationOffsetY += dy;
+
+                // Verschiebe den ersten Punkt und alle anderen entsprechend
+                points = points.map(p => ({ x: p.x + dx, y: p.y + dy }));
+                measurementPoints = measurementPoints.map(p => ({ x: p.x + dx, y: p.y + dy }));
+
+                // Rechne die Gleichungen neu
+                equationCount = 0;
+                equations = {};
+                for (let i = 1; i < points.length; i++) {
+                    calculateAndStoreLineEquation(points[i - 1], points[i]);
+                }
+
+                // PDF erneut rendern, unter Berücksichtigung der Kalibrierung
+                await renderPDF();
+
+                // Clear den Offscreen-Canvas und rendern die Punkte, Linien und Messungen neu
+                offscreenCtx.clearRect(0, 0, offscreenCanvas.width, offscreenCanvas.height);
+                await renderPDF();
+                points.forEach((point, index) => drawPoint(point.x, point.y, 'red', offscreenCtx, startDistance + index * 0.1, true));
+                measurementPoints.forEach(point => drawPoint(point.x, point.y, 'purple', offscreenCtx, false));
+                Object.values(equations).forEach(eq => drawLine({ x: eq.x1, y: eq.y1 }, { x: eq.x2, y: eq.y2 }, offscreenCtx));
+                calculateDistances();
+
+                // Deaktiviere den Kalibriermodus nach der Kalibrierung
+                calibrateMode = false;
+                info.innerHTML = 'Kalibrierung abgeschlossen.';
+            } else if (recordingMode) {
+                const track = allTracks[activeTrackIndex];
+                const color = getColorForTrack(activeTrackIndex); // Funktion zum Erhalten der Farbe für die Strecke
+                startDistance = getDistanceValue();
+
+                track.push({x, y});
+                drawPoint(x, y, color, offscreenCtx, startDistance + currentIndex * 0.1, true);
+                currentIndex++;
+                info.innerHTML = `Punkt gespeichert für Strecke ${activeTrackIndex + 1}: (${x}, ${y})`;
+
+                // Nur wenn >= 2 Punkte vorhanden: Linie + Gleichung berechnen
+                if (track.length >= 2) {
+                        const p1 = track[track.length - 2];
+                        const p2 = track[track.length - 1];
+                        drawLine(p1, p2, offscreenCtx, color);
+                        calculateAndStoreLineEquation(p1, p2, activeTrackIndex);
+
+
+                    // Kalibrierung basierend auf den ersten zwei Punkten
+                    if (track.length === 2) {
+                            const pixelDistance = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+                            distanceScale = 100 / pixelDistance; // Annahme: Die Entfernung zwischen den Punkten ist 100 Meter
+                            info.innerHTML += `<br>Kalibrierung abgeschlossen: 1 Pixel = ${distanceScale.toFixed(4)} Meter`;
+                    }
+                }
+
+            } else if (measuringMode) {
+                cableTracks[activeCableIndex].push({ x, y });
+                drawPoint(x, y, 'purple', offscreenCtx);
+                console.log(`Messpunkt gespeichert: (${x}, ${y})`);
+            } else if (scalingMode) {
+                scalingPoints.push({ x, y });
+                drawPoint(x, y, 'orange', offscreenCtx);
+
+                info.innerHTML = `Skalierungspunkt ${scalingPoints.length} gespeichert: (${x}, ${y})`;
+
+                if (scalingPoints.length === 2) {
+                    const dx = scalingPoints[1].x - scalingPoints[0].x;
+                    const dy = scalingPoints[1].y - scalingPoints[0].y;
+                    const pixelDist = Math.sqrt(dx * dx + dy * dy);
+                    distanceScale = 100 / pixelDist; // Beispiel: 100m zwischen zwei Punkten
+                    scalingMode = false;
+
+                    info.innerHTML += `<br>Skalierung abgeschlossen. 1 Pixel = ${distanceScale.toFixed(4)} m`;
+                    scalingMode = false; // Skalierung beenden
+                }
+                return;
+            }
+
+            render(true); // Neu rendern mit der Berücksichtigung der Kalibrierung
+        }
+
+        function getDistanceValue() {
+            const inputValue = distanceInput.value;
+            const floatValue = parseFloat(inputValue, 10);
+
+            console.log('Startwert als Integer:', floatValue);
+            return floatValue;
+        }
+
+        function drawPoint(x, y, color, ctx, dotDistance, distanceDisplay) {
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(x, y, 5, 0, 2 * Math.PI);
+            ctx.fill();
+            if (distanceDisplay) {
+                ctx.fillStyle = 'black';
+                ctx.font = '12px Poppins';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                console.log(dotDistance);
+                ctx.fillText(`${dotDistance.toFixed(1)} km`, x, y - 10);
+            }
+        }
+
+        function drawLine(p1, p2, ctx, color = 'red') {
+            ctx.strokeStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.stroke();
+        }
+
+        function calculateAndStoreLineEquation(p1, p2, trackIndex) {
+            const m = ((p2.y - p1.y) / (p2.x - p1.x));
+            const n = (p1.y - m * p1.x);
+            const eqIndex = Object.keys(equationsPerTrack[trackIndex]).length + 1;
+
+            equationsPerTrack[trackIndex][`y${eqIndex}`] = {
+                m: parseFloat(m),
+                n: parseFloat(n),
+                x1: p1.x,
+                x2: p2.x,
+                y1: p1.y,
+                y2: p2.y
+            };
+
+            const eqText = `Strecke ${trackIndex + 1} – y${eqIndex} = ${m.toFixed(2)}x + ${n.toFixed(2)}`;
+            console.log(eqText);
+            info.innerHTML = eqText;
+        }
+
+        function calculateDistances(cablePoints, trackIndex) {
+            const equations = equationsPerTrack[activeTrackIndex];
+
+            cablePoints.forEach((point, index) => {
+                let minDistance = Infinity;
+                let closestEquation = '';
+                let closestPoint = { x: 0, y: 0 };
+                pointCounter = index;
+                
+                for (const [key, eq] of Object.entries(equations)) {
+                    const { m, n, x1, x2, y1, y2 } = eq;
+                    const minX = Math.min(x1, x2);
+                    const maxX = Math.max(x1, x2);
+                    const minY = Math.min(y1, y2);
+                    const maxY = Math.max(y1, y2);
+
+                    if (point.x >= Math.min(x1, x2) && point.x <= Math.max(x1, x2)) {
+                        const perpendicularX = (point.x + m * point.y - m * n) / (m * m + 1);
+                        const perpendicularY = (m * point.x + (m * m * point.y) + n) / (m * m + 1);
+
+                        if (perpendicularX >= minX && perpendicularX <= maxX && perpendicularY >= minY && perpendicularY <= maxY) {
+                            const distance = Math.abs(m * point.x - point.y + n) / Math.sqrt(m * m + 1);
+                            if (distance < minDistance) {
+                                minDistance = distance;
+                                closestEquation = key;
+                                closestPoint = { x: perpendicularX, y: perpendicularY };
+                            }
+                        }
+                    }
+                }
+
+                if (minDistance == Infinity) {
+                    console.log(`Kein passender Punkt für Punkt ${index + 1} (${point.x}, ${point.y}) gefunden.`);
+                    
+                    let distances =  [];
+                    for (const track of allTracks) {
+                        for (const trackPoint of track) {
+                            distances.push({
+                                    dist: Math.sqrt(Math.pow(point.x - trackPoint.x, 2) + Math.pow(point.y - trackPoint.y, 2)), 
+                                    trackX:trackPoint.x, 
+                                    trackY:trackPoint.y 
+                                }
+                            );
+                        }
+                    }
+                    distances.sort((a, b) => a.dist - b.dist);
+                    minDistance = distances[0].dist;
+                    closestPoint = { x: distances[0].trackX, y: distances[0].trackY };
+
+                    console.log(distances);
+                    const dx = point.x - closestPoint.x;
+                    const dy = point.y - closestPoint.y;
+                    const m = dy / dx || 0; // Absicherung gegen Division durch 0
+                    const n = closestPoint.y - m * closestPoint.x;
+
+                    // Verwende temporären Schlüssel für die Gleichung
+                    closestEquation = `temp_${index}`;
+                    equations[closestEquation] = {
+                        m: m,
+                        n: n,
+                        x1: closestPoint.x,
+                        y1: closestPoint.y,
+                        x2: point.x,
+                        y2: point.y
+                    }
+                }
+
+                const distanceInMeters = (minDistance * distanceScale); // Abstand in Metern
+                console.log(`Minimale Entfernung des Punktes ${index + 1} (${point.x}, ${point.y}) zu Gleichung ${closestEquation}: ${distanceInMeters} Meter an Punkt (${closestPoint.x.toFixed(2)}, ${closestPoint.y.toFixed(2)})`);
+                info.innerHTML += `<br>Punkt ${index + 1}: Abstand zu ${closestEquation} = ${distanceInMeters.toFixed(2)} Meter`;
+
+                const equationIndex = parseInt(closestEquation.replace('y', ''), 10); // Index der Gleichung
+                console.log(equationIndex);
+                const startFunctionDistance = startDistance + (equationIndex - 1) * 0.1; // Startkilometer der aktuellen Funktion
+                const eq = equations[closestEquation];
+                const { x1, y1, x2, y2 } = eq;
+
+                // Berechne die Distanz entlang der Funktion zwischen den beiden Endpunkten
+                const functionLength = getDistance(x1, y1, x2, y2); // Distanz zwischen Start- und Endpunkt der Funktion in Metern
+
+                // Berechne den Abstand vom Startpunkt der Funktion zum closestPoint
+                const closestPointDistanceOnFunction = getDistance(x1, y1, closestPoint.x, closestPoint.y);
+
+                // Berechne den Anteil der Distanz des closestPoint an der gesamten Funktion
+                const percentageOfFunction = closestPointDistanceOnFunction / functionLength; // Anteil in Prozent
+
+                // Berechne den genauen Kilometer auf der Funktion
+                const closestPointDistanceOnTrack = startFunctionDistance + (percentageOfFunction * 0.1);
+
+                console.log(`Der nächste Punkt befindet sich bei Kilometer: ${closestPointDistanceOnTrack.toFixed(5)}`);
+
+                info.innerHTML += `<br>Punkt ${index + 1}: Abstand zu ${closestEquation} = ${distanceInMeters.toFixed(2)} Meter (Kilometer: ${closestPointDistanceOnTrack.toFixed(5)})`;
+
+                drawPerpendicularLine(point, closestPoint, offscreenCtx);
+
+                if (pointCounter === 1) {
+                    // Wenn der PunktCounter größer als 1 ist, haben wir mindestens 2 Punkte
+                    // Den letzten Messpunkt als Endpunkt des aktuellen Teilstücks setzen
+                    endKm.push(closestPointDistanceOnTrack);
+                    endAbst.push(distanceInMeters);
+
+                } else if (pointCounter === 0) {
+                    // Wenn nur ein Punkt vorhanden ist, haben wir noch kein Teilstück
+                    // Initialisiere das erste Teilstück
+                    startKm.push(closestPointDistanceOnTrack);
+                    startAbst.push(distanceInMeters);
+                } else if (pointCounter > 1) {
+                    endKm.push(closestPointDistanceOnTrack);
+                    endAbst.push(distanceInMeters);
+                    startKm.push(endKm[endKm.length - 2]);
+                    startAbst.push(endAbst[endAbst.length - 2]);
+                }
+
+                console.log(endKm);
+                console.log(startKm);
+                console.log(endAbst);   
+
+                pointCounter++;
+            });
+
+            exportData = [];
+            fillexportData();
+            const teiltrasseWerte = getTeiltrasseWerte();
+            renderExportDataToTable(exportData, teiltrasseWerte);
+            console.log(exportData);
+        }
+
+        function fillexportData() {
+
+                for (let i = 0; i < startKm.length; i++) {
+                    exportData.push([
+                        "1a",              // Teiltrasse
+                        i + 1,             // Abschnitt-Nummer
+                        startKm[i].toFixed(3).replace('.', ','),        // Start-km
+                        endKm[i].toFixed(3).replace('.', ','),          // End-km
+                        startAbst[i].toFixed(3).replace('.', ','),      // Start-Abstand
+                        endAbst[i].toFixed(3).replace('.', ',')         // End-Abstand
+                    ]);
+                }
+        }
+
+        function getDistance(x1, y1, x2, y2) {
+            return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+        }
+
+        function drawPerpendicularLine(p1, p2, ctx) {
+            ctx.strokeStyle = 'purple';
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.stroke();
+        }
+
+        function drawCrosshair(x, y, ctx) {
+            ctx.strokeStyle = 'black';
+            ctx.beginPath();
+            ctx.moveTo(x - 10, y);
+            ctx.lineTo(x + 10, y);
+            ctx.moveTo(x, y - 10);
+            ctx.lineTo(x, y + 10);
+            ctx.stroke();
+        }
+
+        function render(adjusted = false) {
+            onscreenCtx.clearRect(0, 0, onscreenCanvas.width, onscreenCanvas.height);
+
+            // Zeichne das verschobene Offscreen-Canvas
+            const offsetX = adjusted ? calibrationOffsetX : 0;
+            const offsetY = adjusted ? calibrationOffsetY : 0;
+
+            onscreenCtx.drawImage(offscreenCanvas, scrollX + offsetX, scrollY + offsetY, onscreenCanvas.width, onscreenCanvas.height, 0, 0, onscreenCanvas.width, onscreenCanvas.height);
+
+            // Zeichne das Crosshair an der Position des virtuellen Cursors
+            if (document.pointerLockElement === onscreenCanvas && crosshairVisible) {
+                drawCrosshair(onscreenCanvas.width / 2, onscreenCanvas.height / 2, onscreenCtx);
+            }
+        }
+
+        // Initiales Rendern
+        render();
+
+        // Event Listener für Mausklicks auf dem Onscreen-Canvas zum Zeichnen von Punkten
+        onscreenCanvas.addEventListener('click', handleClick);
+
+        function clearConsole() {
+            console.clear();
+        }
+
+        function clearValues() {
+            points = [];
+            measurementPoints = [];
+            equations = {};
+            equationCount = 0;
+            recordingMode = false;
+            measuringMode = false;
+            calibrateMode = false;
+            scrollX = 0;
+            scrollY = 0;
+            calibrationOffsetX = 0;
+            calibrationOffsetY = 0;
+            distanceScale = 1;
+            startKm = [];
+            endKm = [];
+            startAbst = [];
+            endAbst = [];
+            pointCounter = 0;
+            info.innerHTML = "Klicke auf das Canvas, um die Steuerung zu aktivieren. Bewege die Maus, um den Canvas zu verschieben.";
+            clearConsole();
+            console.log("Alle Werte wurden zurückgesetzt.");
+        }
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const sidebarToggle = document.getElementById('sidebar-toggle');
+            const canvasContainer = document.getElementById('canvas-container');
+            const info = document.getElementById('info');
+
+            sidebar.classList.toggle('open');
+            sidebarToggle.classList.toggle('open');
+
+            if (sidebar.classList.contains('open')) {
+                // Sidebar ist geöffnet, verkleinere die Breite des Canvas und Info
+                canvasContainer.style.width = '70%'; // Verkleinert auf 70% der Gesamtbreite
+                info.style.width = '70%';
+		menu.style.width = '70%';
+            } else {
+                // Sidebar ist geschlossen, setze die Breite zurück auf 90%
+                canvasContainer.style.width = '90%';
+                info.style.width = '90%';
+		menu.style.width = '90%';
+            }
+        }
+
+        function toggleSwitch(switchId) {
+            const checkbox = document.getElementById(switchId);
+            if (checkbox) {
+                checkbox.checked = !checkbox.checked;
+            }
+        }
+
+        const pDatenMapping = {
+            0: { 1: 'B2' }, // Zeile 0, Spalte 1 -> Zelle B2
+            1: { 1: 'B3' }, // Zeile 1, Spalte 1 -> Zelle B3
+            2: { 1: 'B4' }, // Zeile 2, Spalte 1 -> Zelle B4
+            3: { 1: 'B6' }, // Zeile 4, Spalte 1 -> Zelle B6
+            4: { 1: 'D23' }, // Zeile 21, Spalte 3 -> Zelle D23
+            5: { 1: 'B11' }, // Zeile 9, Spalte 1 -> Zelle B11
+            6: { 1: 'B12' }, // Zeile 10, Spalte 1 -> Zelle B12
+            7: { 1: 'B13' }, // Zeile 11, Spalte 1 -> Zelle B13
+            8: { 1: 'B14' }, // Zeile 12, Spalte 1 -> Zelle B14
+            9: { 1: 'B15' }, // Zeile 13, Spalte 1 -> Zelle B15
+            10: { 1: 'B42' } // Zeile 40, Spalte 1 -> Zelle B42
+        };
+
+        const sDatenMapping = {
+            1: {
+                0: 'A8',
+                1: 'B8',
+                2: 'C8',
+                3: 'D8',
+                4: 'E8',
+                5: 'F8',
+                6: 'G8',
+                7: 'H8',
+                8: 'I8',
+                9: 'J8',
+                10: 'K8'
+            }
+        };
+
+        const aDatenMapping = {
+            1: { 
+                0: 'A8',
+                1: 'B8',
+                2: 'C8',
+                3: 'D8',
+                4: 'E8',
+                5: 'F8'
+            }
+        };
+
+        function exportTablesToExcel() {
+            // Neues Arbeitsbuch erstellen
+            const wb = XLSX.utils.book_new();
+
+            // P-Daten Sheet
+            const pDatenSheet = createSheetFromTableWithPositions('dataPTable', pDatenMapping);
+            applyStylingToSheet(pDatenSheet, 'P-Daten');
+            XLSX.utils.book_append_sheet(wb, pDatenSheet, "P-Daten");
+
+            // S-Daten Sheet
+            const sDatenSheet = createSheetFromTableWithPositions('dataSTable', sDatenMapping);
+            applyStylingToSheet(sDatenSheet, 'S-Daten');
+            XLSX.utils.book_append_sheet(wb, sDatenSheet, "S-Daten");
+
+            // 1A-Daten Sheet
+            const aDatenSheet = createSheetFromTableWithPositions('data1ATable', aDatenMapping);
+            applyStylingToSheet(aDatenSheet, '1A-Daten');
+            XLSX.utils.book_append_sheet(wb, aDatenSheet, "1A-Daten");
+
+            // Zusätzliche Sheets mit Headern
+            const additionalSheet1 = createEmptySheetWithHeaders("Zusätzliche Daten 1", ["Header 1", "Header 2", "Header 3"]);
+            XLSX.utils.book_append_sheet(wb, additionalSheet1, "Zusatz 1");
+
+            const additionalSheet2 = createEmptySheetWithHeaders("Zusätzliche Daten 2", ["Spalte A", "Spalte B", "Spalte C", "Spalte D"]);
+            XLSX.utils.book_append_sheet(wb, additionalSheet2, "Zusatz 2");
+
+            // Datei exportieren
+            XLSX.writeFile(wb, "Exportierte_Daten.xlsx");
+        }
+
+        function createSheetFromTableWithPositions(tableId, cellMapping) {
+            const table = document.getElementById(tableId);
+            const rows = Array.from(table.querySelectorAll('tr'));
+            const sheet = {};
+
+            // Tabellenzeilen durchlaufen
+            rows.forEach((row, rowIndex) => {
+                const cells = Array.from(row.querySelectorAll('td, th'));
+                cells.forEach((cell, colIndex) => {
+
+                    const input = cell.querySelector('input, select');
+                    const value = input ? input.value : cell.textContent.trim();
+
+                    // Debugging: Überprüfen, ob rowIndex und colIndex in cellMapping vorhanden sind
+                    if (!cellMapping[rowIndex]) {
+                        console.warn(`Zeile ${rowIndex} ist nicht in cellMapping definiert.`);
+                        return; // Überspringe diese Zeile
+                    }
+
+                    if (!cellMapping[rowIndex][colIndex]) {
+                        console.warn(`Spalte ${colIndex} in Zeile ${rowIndex} ist nicht in cellMapping definiert.`);
+                        return; // Überspringe diese Spalte
+                    }
+
+                    // Zellenposition aus der Mapping-Tabelle holen
+                    const cellPosition = cellMapping[rowIndex][colIndex];
+                    if (cellPosition) {
+                        sheet[cellPosition] = { v: value };
+                    }
+                });
+            });
+
+            // Bereich des Arbeitsblatts definieren
+            sheet['!ref'] = calculateSheetRange(sheet);
+            return sheet;
+        }
+
+        // Hilfsfunktion: Bereich des Arbeitsblatts berechnen
+        function calculateSheetRange(sheet) {
+            const cellAddresses = Object.keys(sheet).filter(key => !key.startsWith('!'));
+            const startCell = cellAddresses[0];
+            const endCell = cellAddresses[cellAddresses.length - 1];
+            return `${startCell}:${endCell}`;
+        }
+
+        function applyStylingToSheet(sheet, sheetName) {
+            // Definiere den Bereich des Arbeitsblatts
+            sheet['!ref'] = 'A1:N57';
+
+            // Zellbereich mergen (z. B. für Überschriften)
+            sheet['!merges'] = [
+                { s: { r: 0, c: 0 }, e: { r: 0, c: 1 } } // A1:B1
+            ];
+
+            // Spaltenbreiten festlegen
+            sheet['!cols'] = [
+                { wch: 25 }, // Spalte A
+                { wch: 25 }, // Spalte B
+                { wch: 5 }, // Spalte C
+                { wch: 25 }, // Spalte D
+                { wch: 25 }, // Spalte E
+                { wch: 25 }, // Spalte F
+                { wch: 25 }  // Spalte G
+            ];
+
+            // Sheet-spezifisches Styling
+            if (sheetName === 'P-Daten') {
+                sheet['A1'] = {
+                    v: 'BEPRO-BAHN-PROJEKTDATEI',
+                    s: {
+                        font: { bold: true, sz: 14 },
+                        alignment: { horizontal: 'center' },
+                        fill: { fgColor: { rgb: 'FFA500' } } // Orange Hintergrund
+                    }
+                };
+            } else if (sheetName === 'S-Daten') {
+                sheet['A1'] = {
+                    v: 'Stromsystem-Daten',
+                    s: {
+                        font: { bold: true, sz: 14 },
+                        alignment: { horizontal: 'center' },
+                        fill: { fgColor: { rgb: 'CFEAD1' } } // Grünlicher Hintergrund
+                    }
+                };
+            } else if (sheetName === '1A-Daten') {
+                sheet['A1'] = {
+                    v: '1A-Daten Übersicht',
+                    s: {
+                        font: { bold: true, sz: 14 },
+                        alignment: { horizontal: 'center' },
+                        fill: { fgColor: { rgb: 'ADD8E6' } } // Blauer Hintergrund
+                    }
+                };
+            }
+        }
+
+        function createEmptySheetWithHeaders(sheetTitle, headers) {
+            const sheet = {};
+
+            // Titel in die erste Zeile schreiben
+            sheet['A1'] = {
+                v: sheetTitle,
+                s: {
+                    font: { bold: true, sz: 14 },
+                    alignment: { horizontal: 'center' },
+                    fill: { fgColor: { rgb: 'FFA500' } } // Orange Hintergrund
+                }
+            };
+
+            // Header in die zweite Zeile schreiben
+            headers.forEach((header, index) => {
+                const col = String.fromCharCode(65 + index); // A, B, C, ...
+                sheet[`${col}2`] = {
+                    v: header,
+                    s: {
+                        font: { bold: true },
+                        alignment: { horizontal: 'center' },
+                        fill: { fgColor: { rgb: 'CFEAD1' } } // Grünlicher Hintergrund
+                    }
+                };
+            });
+
+            // Bereich des Arbeitsblatts definieren
+            const lastCol = String.fromCharCode(65 + headers.length - 1); // Letzte Spalte basierend auf der Header-Anzahl
+            sheet['!ref'] = `A1:${lastCol}10`; // Bereich von A1 bis zur letzten Spalte (z. B. A1:D10)
+
+            // Spaltenbreiten festlegen
+            sheet['!cols'] = headers.map(() => ({ wch: 20 })); // Alle Spalten auf Breite 20 setzen
+
+            return sheet;
+        }
+
+        function renderExportDataToTable(data, teiltrasseOptions) {
+            const table = document.getElementById("data1ATable");
+
+            // ❌ Dummy-Zeile und alle Datenzeilen entfernen (Header bleibt)
+            while (table.rows.length > 1) {
+                table.deleteRow(1);
+            }
+
+            // ✅ Neue Zeilen basierend auf dem exportData-Array
+            data.forEach((rowData, rowIndex) => {
+                const tr = document.createElement("tr");
+
+                rowData.forEach((cellValue, colIndex) => {
+                    const td = document.createElement("td");
+
+                    // 👈 Teiltrasse-Spalte (Dropdown)
+                    if (colIndex === 0 && Array.isArray(teiltrasseOptions)) {
+                        const select = document.createElement("select");
+
+                        teiltrasseOptions.forEach(optVal => {
+                            const option = document.createElement("option");
+                            option.value = optVal;
+                            option.textContent = optVal;
+                            if (optVal === cellValue) {
+                                option.selected = true;
+                            }
+                            select.appendChild(option);
+                        });
+
+                        td.appendChild(select);
+                    } else {
+                        // ✍️ Andere Spalten: Input-Felder
+                        const input = document.createElement("input");
+                        input.type = colIndex === 1 ? "number" : "text";
+                        input.value = cellValue;
+                        td.appendChild(input);
+                    }
+
+                    tr.appendChild(td);
+                });
+
+                table.appendChild(tr);
+            });
+        }
+
+        /*function renderExportDataToTable(data, teiltrasseOptions) {
+            const table = document.getElementById("data1ATable");
+
+            // Lösche alle Zeilen außer der Kopfzeile (Zeile 0)
+            while (table.rows.length > 1) {
+                table.deleteRow(1);
+            }
+
+            // Jetzt dynamisch neue Datenzeilen anhängen
+            for (let i = 0; i < data.length; i++) {
+                const rowData = data[i];
+                const tr = document.createElement("tr");
+
+                rowData.forEach((cellValue, colIndex) => {
+                    const td = document.createElement("td");
+
+                    // Teiltrasse-Spalte (Spalte 0) → Dropdown statt Input
+                    if (colIndex === 0 && Array.isArray(teiltrasseOptions)) {
+                        const select = document.createElement("select");
+
+                        teiltrasseOptions.forEach(optVal => {
+                            const option = document.createElement("option");
+                            option.value = optVal;
+                            option.textContent = optVal;
+                            if (optVal === cellValue) {
+                                option.selected = true;
+                            }
+                            select.appendChild(option);
+                        });
+
+                        td.appendChild(select);
+                    } else {
+                        // Standard-Input für alle anderen Spalten
+                        const input = document.createElement("input");
+                        input.type = colIndex === 1 ? "number" : "text";
+                        input.value = cellValue;
+                        td.appendChild(input);
+                    }
+
+                    tr.appendChild(td);
+                });
+
+                table.appendChild(tr);
+            }
+        }*/
+
+        /*function createWorkbookAndExport() {
+            const wb = XLSX.utils.book_new();
+            const ws = {};
+
+            // Setze Inhalte direkt in bestimmte Zellen
+            ws['A1'] = {
+                v: 'BEPRO-BAHN-PROJEKTDATEI',
+                s: {
+                font: { bold: true, sz: 14 },
+                alignment: { horizontal: 'center' },
+                fill: { fgColor: { rgb: 'FFA500' } }, // orange
+                }
+            };
+
+            ws['A2'] = { v: 'Programmversion:', s: { fill: { patternType: "solid", fgColor: { rgb: 'CFEAD1' } } } };
+            ws['B2'] = { v: 'VERSION V1.5' };
+
+            ws['A3'] = { v: 'Datum:', s: { font: { bold: true }, fill: { fgColor: { rgb: 'CFEAD1' } } } };
+            ws['B3'] = { v: '12.08.2024' };
+
+            ws['A4'] = { v: 'Uhrzeit:', s: { font: { bold: true }, fill: { fgColor: { rgb: 'CFEAD1' } } } };
+            ws['B4'] = { v: '12:58:17' };
+
+            // Du kannst so beliebig viele Zellen definieren
+            ws['!ref'] = 'A1:N57'; // Definiere den Bereich des Arbeitsblatts
+            // Zellbereich mergen (A1 bis E1)
+            ws['!merges'] = [
+                { s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }  // A1:E1
+            ];
+
+            // Spaltenbreiten festlegen
+            ws['!cols'] = [
+                { wch: 25 },
+                { wch: 20 },
+                { wch: 15 },
+                { wch: 25 },
+                { wch: 25 },
+                { wch: 25 },
+                { wch: 25 }
+            ];
+
+            // Arbeitsblatt einfügen
+            XLSX.utils.book_append_sheet(wb, ws, "P-Daten");
+
+            // Datei exportieren
+            XLSX.writeFile(wb, "P-Daten-export.xlsx");
+        }*/
+
+        let teiltrasseIndex = 2;
+
+        function addRowToKTable() {
+            const table = document.getElementById('dataKTable');
+            const templateRow = document.getElementById('kTableTemplateRow');
+            const clone = templateRow.cloneNode(true);
+            clone.removeAttribute('id');
+
+            // Teiltrasse setzen
+            clone.querySelector('td input[type="text"]').value = `1${String.fromCharCode(96 + teiltrasseIndex++)}`;
+
+            // Alle number-Felder und select zurücksetzen
+            clone.querySelectorAll('input[type="number"]').forEach(input => input.value = '');
+            clone.querySelector('select').value = '0';
+
+            table.appendChild(clone);
+        }
+
+        function renderAllTracks() {
+            render(true);  // Hintergrund neu zeichnen
+            allTracks.forEach((track, trackIndex) => {
+                const color = getColorForTrack(trackIndex);
+
+                for (let i = 0; i < track.length; i++) {
+                    drawPoint(track[i].x, track[i].y, color, offscreenCtx, startDistance + i * 0.1, true);
+                    if (i > 0) {
+                        drawLine(track[i - 1], track[i], offscreenCtx, color);
+                    }
+                }
+            });
+        }
+        
+        function switchTrack(index) {
+            if (index >= 0 && index < allTracks.length) {
+                activeTrackIndex = index;
+                renderAllTracks();  // optional: alle anzeigen
+            }
+        }
+
+        function newTrack() {
+            allTracks.push([]);
+            equationsPerTrack.push({});
+            activeTrackIndex = allTracks.length - 1;
+            console.log(`Neue Strecke gestartet (Index: ${activeTrackIndex})`);
+        }
+
+        function getColorForTrack(index) {
+            const colors = ['red', 'blue', 'green', 'orange', 'purple', 'teal', 'brown', 'pink'];
+            return colors[index % colors.length];
+        }
+
+        function newCableTrack() {
+            cableTracks.push([]);
+            activeCableIndex = cableTracks.length - 1;
+        }
+
+        function switchCable(index) {
+            if (index >= 0 && index < cableTracks.length) {
+                activeCableIndex = index;
+                // ggf. rendern
+            }
+        }
+
+        function showSheet(sheetName) {
+            const sheets = document.querySelectorAll('.sheet-content');
+            sheets.forEach(sheet => {
+                sheet.classList.remove('sheet-active');
+                if (sheet.id === `sheet-${sheetName}`) {
+                    sheet.classList.add('sheet-active');
+                }
+            });
+        }
+
+        function show1AData() {
+            const table = document.getElementById("data1ATable");
+            const rows = table.querySelectorAll("tr:not(:first-child)"); // Alle Zeilen außer der Kopfzeile
+            rows.forEach(row => row.style.display = "none"); // Alle Zeilen ausblenden
+
+            const teiltrasseWerte = getTeiltrasseWerte();
+            renderExportDataToTable(exportData, teiltrasseWerte);
+        }
+
+        function getTeiltrasseWerte() {
+            const selectElements = document.querySelectorAll("#data1ATable select");
+            return Array.from(selectElements).map(select => select.value);
+        }   
+
+        function renderAllTracks() {
+            render(true); // Hintergrund und PDF zeichnen
+
+            allTracks.forEach((track, trackIndex) => {
+                const color = getColorForTrack(trackIndex);
+
+                for (let i = 0; i < track.length; i++) {
+                    const point = track[i];
+                    drawPoint(point.x, point.y, color, offscreenCtx, startDistance + i * 0.1, true);
+                    if (i > 0) {
+                        drawLine(track[i - 1], track[i], offscreenCtx, color);
+                    }
+                }
+            });
+        }
+
+        function getColorForTrack(index) {
+            const colors = ['red', 'blue', 'green', 'orange', 'purple', 'teal', 'brown', 'pink'];
+            return colors[index % colors.length];
+        }
+
+        function show1AData() {
+            const table = document.getElementById("data1ATable");
+            const rows = table.querySelectorAll("tr:not(:first-child)"); // Alle Zeilen außer der Kopfzeile
+            rows.forEach(row => row.style.display = "none"); // Alle Zeilen ausblenden
+
+            const teiltrasseWerte = getTeiltrasseWerte();
+            renderExportDataToTable(exportData, teiltrasseWerte);
+        }
+
+        function getTeiltrasseWerte() {
+            const selectElements = document.querySelectorAll("#data1ATable select");
+            return Array.from(selectElements).map(select => select.value);
+        }   
+
+
+    </script>
+
+    </div>
+
+    <!-- Seite: Excel Bearbeitung -->
+    <div id="page-excel" class="page">
+
+    <!-- Tabs -->
+    <div class="sheet-tabs">
+        <button onclick="showSheet('P-Daten')">P-Daten</button>
+        <button onclick="showSheet('S-Daten')">S-Daten</button>
+        <button onclick="show1AData()">1A-Daten</button>
+        <button onclick="showSheet('K-Daten')">K-Daten</button>
+    </div>
+
+    <!-- Inhalt P-Daten -->
+    <div id="sheet-P-Daten" class="sheet-content sheet-active">
+        <table id="dataPTable">
+        <tr><td>Programmversion:</td><td><input type="text" value="VERSION V1.5" /></td></tr>
+        <tr><td>Datum:</td><td><input type="date" /></td></tr>
+        <tr><td>Uhrzeit:</td><td><input type="time" /></td></tr>
+        <tr><td>Bauvorhaben:</td><td><input type="text" /></td></tr>
+        <tr><td>Bauvorhaben-Nummer:</td><td><input type="text" /></td></tr>
+        <tr><td>Plan-Name:</td><td><input type="text" /></td></tr>
+        <tr><td>Anzahl Stromsysteme:</td><td><input type="number" /></td></tr>
+        <tr><td>Anzahl Kabel:</td><td><input type="number" /></td></tr>
+        <tr><td>Streckennummer:</td><td><input type="text" /></td></tr>
+        <tr><td>Regionalbereich:</td>
+            <td>
+                <select>
+                    <option value="Ost">Ost</option>
+                    <option value="Mitte">Mitte</option>
+                    <option value="West">West</option>
+                    <option value="Nord">Nord</option>
+                    <option value="Süd">Süd</option>
+                </select>
+            </td>
+        </tr>
+        <tr><td>Berechnungsart:</td><td><input type="text" /></td></tr>
+        </table>
+    </div>
+
+    <!-- Inhalt S-Daten -->
+    <div id="sheet-S-Daten" class="sheet-content">
+        <table id="dataSTable">
+        <tr>
+            <th>Stromsystem Name:</th><th>Frequenz/Phasenl.:</th><th>Unterwerks km:</th><th>I-Kurven vorh.:</th><th>IF-Zeichnungsnr.:</th><th>IF-Datum:</th><th>IK-Zeichnungsnr.:</th><th>IK-Datum:</th><th>Diagramm-vz:</th><th>Diagramm-y0:</th><th>Diagramm-x0:</th>
+        </tr>
+        <tr class="dummy-row">
+            <td><input type="text" value="" /></td>
+            <td>
+                <select>
+                    <option value="16.7Hz synchron">16.7Hz synchron</option>
+                    <option value="16.7Hz asynchron">16.7Hz asynchron</option>
+                    <option value="50Hz">50Hz</option>
+                </select>
+            </td>
+            <td><input type="text" value="" /></td>
+            <td>
+                <select>
+                    <option value="Ja">Ja</option>
+                    <option value="Nein">Nein</option>
+                </select>
+            </td>
+            <td><input type="text" value="" /></td>
+            <td><input type="date" /></td>
+            <td><input type="text" value="" /></td>
+            <td><input type="date" /></td>
+            <td><input type="text" value="" /></td>
+            <td><input type="text" value="" /></td>
+            <td><input type="text" value="" /></td>
+        </tr>
+        </table>
+    </div>
+
+    <!-- Inhalt 1A-Daten -->
+    <div id="sheet-1A-Daten" class="sheet-content">
+        <table id="data1ATable">
+        <tr>
+            <th>Teiltrasse</th><th>Abschnitt</th><th>Start-km</th><th>Ende-km</th><th>Start-Abst.</th><th>Ende-Abst.</th>
+        </tr>
+        <tr class="dummy-row">
+            <td><input type="text" value="" /></td>
+            <td><input type="number" value="" /></td>
+            <td><input type="text" value="" /></td>
+            <td><input type="text" value="" /></td>
+            <td><input type="text" value="" /></td>
+            <td><input type="text" value="" /></td>
+        </tr>
+        </table>
+    </div>
+
+    <!-- Inhalt K-Daten -->
+    <div id="sheet-K-Daten" class="sheet-content">
+        <table id="dataKTable">
+        <tr>
+            <th>Teiltrasse:</th><th>Boden-Leitf.:</th><th>Anz.Gleise:</th><th>Oberleitung:</th><th>Rückleiter</th>
+        </tr>
+        <tr id="kTableTemplateRow">
+            <td><input type="text" value="1a" /></td>
+            <td><input type="number" value="" /></td>
+            <td><input type="number" value="" /></td>
+            <td><input type="number" value="" /></td>
+            <td>
+                <select>
+                    <option value="0">Nein</option>
+                    <option value="1">Ja</option>
+                </select>
+            </td>
+        </tr>
+        </table>
+        <button onclick="addRowToKTable()">Zeile hinzufügen</button>
+    </div>
+
+    <br>
+    <button onclick="exportTablesToExcel()">Exportieren</button>
+    </div>
+<script>
+    function switchPage(page) {
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.getElementById('page-' + page).classList.add('active');
+
+        if (page === 'main') {
+            showEquationsInTable(); // Wenn Hauptseite geladen wird, Gleichungen anzeigen
+        }
+    }
+
+    function showSheet(sheetId) {
+      document.querySelectorAll('.sheet-content').forEach(s => s.classList.remove('sheet-active'));
+      document.getElementById('sheet-' + sheetId).classList.add('sheet-active');
+    }
+
+    function show1AData() {
+        showSheet('1A-Daten');
+
+        const teiltrasseWerte = getTeiltrasseWerte();
+
+        // Wenn exportData schon gefüllt ist, Tabelle neu rendern
+        if (exportData.length > 0) {
+            renderExportDataToTable(exportData, teiltrasseWerte);
+        }
+    }
+
+    function getTeiltrasseWerte() {
+        const table = document.getElementById('dataKTable');
+        const rows = Array.from(table.querySelectorAll('tr'));
+        
+        const teiltrasseWerte = rows
+            .slice(1) // erste Zeile (Header) überspringen
+            .map(row => {
+                const input = row.querySelector('td input[type="text"]');
+                return input ? input.value.trim() : null;
+            })
+            .filter(value => value); // leere oder ungültige Werte entfernen 
+            console.log("Zeilen gefunden:", rows.length);
+            console.log("Teiltrassen-Werte:", teiltrasseWerte);
+        return teiltrasseWerte;
+    }
+
+    /*function fillTeiltrasseDropdown(werteArray) {
+        const select = document.getElementById('teiltrasseDropdown');
+
+        // Vorherige Optionen entfernen
+        select.innerHTML = '';
+
+        // Neue Optionen basierend auf dem Array hinzufügen
+        werteArray.forEach(wert => {
+            const option = document.createElement('option');
+            option.value = wert;
+            option.textContent = wert;
+            select.appendChild(option);
+        });
+    }*/
+</script>
+
+<div id="page-main" class="page">
+    <div style="padding: 2vw">
+        <h2>Gespeicherte Gleichungen pro Strecke</h2>
+        <div id="equationTableContainer"></div>
+        <br>
+        <button onclick="startScalingMode()">Skalierung</button>
+        <button id="trackInitBtn" onclick="startInitialTrack()">Strecke einlesen</button>
+        <button id="trackNewBtn" onclick="startNewTrack()" style="display: none;">Neu</button>
+      </div>
+</div>
+<script>
+    let scalingPoints = [];
+    let scalingMode = false;
+
+    /*function showEquationsInTable() {
+    const container = document.getElementById('equationTableContainer');
+    container.innerHTML = ''; // Leeren
+
+    equationsPerTrack.forEach((equations, trackIndex) => {
+        const table = document.createElement('table');
+        table.style.marginBottom = '2vw';
+        table.style.width = '100%';
+        table.style.borderCollapse = 'collapse';
+
+        const caption = document.createElement('caption');
+        caption.textContent = `Strecke ${trackIndex + 1}`;
+        caption.style.fontWeight = 'bold';
+        caption.style.marginBottom = '0.5vw';
+        table.appendChild(caption);
+
+        const header = document.createElement('tr');
+        ['Name', 'Steigung m', 'Y-Achsenabschnitt n', 'x1', 'y1', 'x2', 'y2'].forEach(text => {
+            const th = document.createElement('th');
+            th.textContent = text;
+            th.style.border = '1px solid gray';
+            th.style.padding = '0.3vw';
+            table.appendChild(header);
+            header.appendChild(th);
+        });
+
+        for (const [name, eq] of Object.entries(equations)) {
+            const row = document.createElement('tr');
+            [name, eq.m, eq.n, eq.x1, eq.y1, eq.x2, eq.y2].forEach(val => {
+                const td = document.createElement('td');
+                td.textContent = Number.isFinite(val) ? val.toFixed(2) : val;
+                td.style.border = '1px solid #ccc';
+                td.style.padding = '0.3vw';
+                row.appendChild(td);
+            });
+            table.appendChild(row);
+        }
+
+        container.appendChild(table);
+    });
+
+    }*/
+
+    function showEquationsInTable() {
+        const container = document.getElementById('equationTableContainer');
+        container.innerHTML = '';
+
+        if (equationsPerTrack.length === 0 || equationsPerTrack.every(obj => Object.keys(obj).length === 0)) {
+            const noData = document.createElement('p');
+            noData.textContent = 'Noch keine Gleichungen erfasst.';
+            noData.style.textAlign = 'center';
+            noData.style.fontStyle = 'italic';
+            container.appendChild(noData);
+            return;
+        }
+
+        equationsPerTrack.forEach((equations, trackIndex) => {
+            const table = document.createElement('table');
+            table.style.width = '100%';
+            table.style.marginBottom = '2vw';
+            table.style.borderCollapse = 'collapse';
+            table.style.border = '1px solid #ccc';
+            table.style.fontSize = '0.7vw';
+
+            const caption = document.createElement('caption');
+            caption.textContent = `Strecke ${trackIndex + 1}`;
+            caption.style.fontWeight = 'bold';
+            caption.style.marginBottom = '0.5vw';
+            caption.style.fontSize = '0.8vw';
+            table.appendChild(caption);
+
+            const thead = document.createElement('thead');
+            const headerRow = document.createElement('tr');
+            ['Name', 'Steigung m', 'Y-Achsenabschnitt n', 'x1', 'y1', 'x2', 'y2'].forEach(text => {
+                const th = document.createElement('th');
+                th.textContent = text;
+                th.style.border = '1px solid #ccc';
+                th.style.padding = '0.3vw';
+                th.style.background = '#f0f0f0';
+                headerRow.appendChild(th);
+            });
+            thead.appendChild(headerRow);
+            table.appendChild(thead);
+
+            const tbody = document.createElement('tbody');
+
+            for (const [name, eq] of Object.entries(equations)) {
+                const row = document.createElement('tr');
+                [name, eq.m, eq.n, eq.x1, eq.y1, eq.x2, eq.y2].forEach(val => {
+                    const td = document.createElement('td');
+                    td.textContent = Number.isFinite(val) ? val.toFixed(2) : val;
+                    td.style.border = '1px solid #ccc';
+                    td.style.padding = '0.3vw';
+                    row.appendChild(td);
+                });
+                tbody.appendChild(row);
+            }
+
+            table.appendChild(tbody);
+            container.appendChild(table);
+        });
+    }
+
+
+    function startScalingMode() {
+        scalingMode = true;
+        scalingPoints = [];
+        switchPage('berechnung');
+        info.innerHTML = "Klicke 2 Punkte für die Skalierung auf dem Canvas.";
+
+        // optional Fullscreen (Canvas hervorheben)
+        document.getElementById('canvas-container').scrollIntoView({ behavior: "smooth" });
+    }
+
+    function startInitialTrack() {
+        switchPage('berechnung'); // zum Canvas springen
+        recordingMode = true;
+        toggleSwitch('switch1');
+        info.innerHTML = 'Erste Strecke gestartet. Aufnahmemodus aktiv.';
+        updateTrackButtons(); // Buttons umschalten
+    }
+
+    function startNewTrack() {
+        newTrack(); // initialisiert neue Strecke
+        switchPage('berechnung'); // Canvas zeigen
+        recordingMode = true;
+        toggleSwitch('switch1');
+        info.innerHTML = 'Neue Strecke gestartet. Aufnahmemodus aktiv.';
+    }
+
+    function updateTrackButtons() {
+        const trackInitBtn = document.getElementById('trackInitBtn');
+        const trackNewBtn = document.getElementById('trackNewBtn');
+
+        if (allTracks.length >= 1) {
+            trackInitBtn.style.display = 'none';
+            trackNewBtn.style.display = 'inline-block';
+        } else {
+            trackInitBtn.style.display = 'inline-block';
+            trackNewBtn.style.display = 'none';
+        }
+    }
+</script>
+</body>
+</html>
