@@ -1,0 +1,2125 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Offscreen-Canvas mit Pointer Lock</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #cbd9ee;
+            --primary-hover: #c5cbd3;
+            --background-color: rgba(255, 255, 255, 0.6);
+            --blur-background: rgba(255, 255, 255, 0.8);
+            --font-color: #333;
+            --border-radius: 1vw;
+            --box-shadow: 0px 0.167px 0.83vw rgba(0, 0, 0, 0.15);
+            --font-family: 'Poppins', sans-serif;
+        }
+
+        .menu {
+            display: flex; /* Flexbox aktivieren */
+            justify-content: center;
+            text-align: center;
+            height: 5vh;
+            gap: 10px;
+        }
+
+        .menu bar {
+            margin: 10px;
+            padding: 5px 10px;
+            font-weight: bold;
+	    text-align: center;
+            border: none;
+            border-radius: var(--border-radius);
+            transition: background-color 0.3s;
+            cursor: pointer;
+        }
+
+	bar:hover {
+            background-color: var(--primary-hover);
+        }
+
+	.menu-input {
+            font-size: 0.7vw;
+            font-family: var(--font-family);
+        }
+
+        body {
+            margin: 0;
+            font-family: var(--font-family);
+            background: linear-gradient(180deg, #fafbff, #c0c0c0);
+            color: var(--font-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            height: 100vh;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+            justify-content: space-between;
+            align-items: center;
+            position: relative;
+        }
+
+        #canvas-container {
+            width: 90vw;  /* Initiale Breite von 90% */
+            height: 80vh;
+            top: 10vh;  /* Abstand von der oberen Kante */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            overflow: hidden;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            position: fixed;  /* Ändern Sie die Position auf absolut */
+            left: 5%;  /* Die linke Position bleibt fest, z.B. 5% vom linken Rand */
+            cursor: crosshair;
+            transition: width 0.7s ease;
+        }
+
+        #pdf-controls {
+            display: flex !important;
+            flex-direction: row;
+            gap: 1vw;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        #onscreen-canvas {
+            flex: 1 1 auto;
+            display: block;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .button-container {
+            position: relative;
+            display: flex;
+            gap: 1vw;
+            flex-direction: column;
+            z-index: 1002;
+            padding: 1vw;
+            border-radius: var(--border-radius);
+            background: rgba(255, 255, 255, 0.1); /* Transparenz für den Container */
+            box-shadow: var(--box-shadow);
+            backdrop-filter: blur(10px);
+        }
+
+        button, .file-input-label {
+            display: inline-block;
+            padding: 0.5vw 1vw;
+            font-size: 0.9vw;
+            background-color: #c0c0c0;
+            color: #333;
+            border: none;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            transition: background-color 0.3s;
+            font-family: var(--font-family);
+            cursor: pointer;
+            display: flex;
+            gap: 0.7vw;
+            align-items: center;
+        }
+
+        button:hover, .file-input-label:hover {
+            background-color: var(--primary-hover);
+        }
+
+        #modalOverlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255,255,255,0.5);
+            backdrop-filter: blur(8px);
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #modalContent {
+            background: white;
+            border-radius: 1vw;
+            box-shadow: 0 0 2vw rgba(0,0,0,0.2);
+            padding: 2vw;
+            min-width: 300px;
+            min-height: 200px;
+            max-width: 90vw;
+            max-height: 90vh;
+            overflow: auto;
+        }
+
+        #legend {
+            position: relative;
+            font-size: 0.9vw;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            z-index: 1001;
+            padding: 0.5vw 0 0.5vw 0;
+            padding-left: 1vw;
+        }
+
+        #legend strong {
+            font-weight: 600;
+            font-size: 1.1vw;
+        }
+
+        #info {
+            padding: 1vw;
+            bottom: 2vh;
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            font-size: 0.7vw;
+            font-family: var(--font-family);
+            text-align: center;
+            position: absolute;  /* Ändern Sie die Position auf absolut */
+            left: 5%;  /* Die linke Position bleibt fest, z.B. 5% vom linken Rand */
+            transition: width 0.7s ease;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        #file-name {
+            font-size: 0.9vw;
+            color: var(--font-color);
+            font-family: var(--font-family);
+            align-self: center;
+        }
+
+        #distance-input {
+            width: 30%;
+            height: 100%;
+            backdrop-filter: blur(10px);
+            background: var(--blur-background);
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            font-family: var(--font-family);
+            text-align: center;
+        }
+
+        .format-radio-group {
+            display: flex;
+            gap: 2vw;
+            align-items: center;
+            margin-top: 1vw;
+            margin-bottom: 1vw;
+        }
+        .format-radio-group label {
+            display: flex;
+            align-items: center;
+            font-size: 1vw;
+            cursor: pointer;
+            gap: 0.5vw;
+        }
+        .format-radio-group input[type="radio"] {
+            accent-color: #333;
+            width: 1vw;
+            height: 1vw;
+            margin-right: 0.5vw;
+        }
+
+        .sidebar {
+            background: linear-gradient(120deg, #e4e4e4, #c5c5c5);
+            position: fixed;
+            right: -20%;
+            top: 0;
+            width: 20%;
+            height: 100%;
+            background-color: var(--blur-background);
+            box-shadow: var(--box-shadow);
+            border-radius: 12px 0 0 12px;
+            padding: 1vw;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            transition: right 0.7s ease;
+            z-index: 1001;
+        }
+
+        .sidebar.open {
+            right: 0;
+        }
+
+        /* Button zum Öffnen/Schließen der Seitenleiste */
+        .sidebar-toggle {
+            position: fixed;
+            right: 0;
+            top: 1vw;
+            padding: 1vw;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: var(--border-radius);
+            color: #333;
+            border-radius: 1vw 0 0 1vw;
+            box-shadow: var(--box-shadow);
+            cursor: pointer;
+            align-items: center;
+            z-index: 1000;
+            transition: right 0.7s ease;
+        }
+
+        .sidebar-toggle.open {
+            right: 20%;
+        }
+
+        .switch-container {
+            position: absolute;
+            display: flex;
+            flex-direction: column;
+            gap: 1vw;
+            top: 1.5vw;
+            left: 2vw;
+            
+        }
+
+        .switch {
+            display: flex;
+            align-items: center;
+            position: relative;
+            width: 4.375vw;
+            height: 1.5vw;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.1); /* Transparenz für den Container */
+            box-shadow: var(--box-shadow);
+            backdrop-filter: blur(10px);
+            transition: .4s;
+            border-radius: 1.5vw;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 1vw;
+            width: 1vw;
+            border-radius: 1vw;
+            left: 0.25vw;
+            bottom: 0.25vw;
+            background-color: rgb(53, 53, 53);
+            transition: transform 0.7s;
+        }
+
+        input:checked + .slider {
+            background-color: #c0c0c0;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(2.875vw);
+        }
+
+        .switch-text {
+            margin-left: 5vw;
+            font-size: 0.7vw;
+
+        }
+
+        .page {
+        display: none;
+        padding: 20px;
+        }
+        .active {
+        display: block;
+        }
+
+        /* Sheet Tabs */
+        .sheet-tabs {
+        margin-top: 20px;
+        display: flex;
+        justify-content: center;
+        }
+        .sheet-tabs button {
+        margin: 0 5px;
+        padding: 8px 16px;
+        cursor: pointer;
+        }
+
+        .sheet-content {
+        display: none;
+        margin-top: 20px;
+        }
+
+        .sheet-active {
+        display: block;
+        }
+
+        table {
+        width: 100%;
+        border-collapse: collapse;
+        }
+        td {
+        border: 1px solid #ccc;
+        padding: 4px;
+        }
+        input {
+        width: 100%;
+        box-sizing: border-box;
+        }
+
+        #dataPTable {
+            width: 35.3vw; /* Standardbreite */
+            font-size: calc(0.8vw); /* Feste Schriftgröße */
+            margin: 0 auto; /* Zentriert die Tabelle */
+            border-collapse: collapse;
+        }
+
+        #dataPTable td, #dataPTable th {
+            padding: 4px;
+            text-align: left;
+        }
+
+        #dataSTable {
+            width: 90vw; /* Tabelle nimmt 90% der Breite des Viewports ein */
+            max-width: 100%; /* Verhindert, dass die Tabelle breiter als der Bildschirm wird */
+            margin: 0 auto; /* Zentriert die Tabelle horizontal */
+            border-collapse: collapse; /* Entfernt doppelte Rahmen */
+            font-size: calc(0.7vw); /* Schriftgröße passt sich dynamisch an die Breite an */
+        }
+
+        #dataSTable td, #dataSTable th {
+            text-align: center; /* Zentriert den Text */
+            word-wrap: break-word; /* Zeilenumbruch für lange Inhalte */
+        }
+
+        input[type="text"],
+        input[type="date"],
+        input[type="time"],
+        input[type="number"],
+        select {
+            font-size: calc(0.6vw); /* Verkleinert die Schriftgröße */
+            padding: 4px; /* Passt den Innenabstand an */
+            height: auto; /* Passt die Höhe automatisch an die Schriftgröße an */
+            box-sizing: border-box; /* Stellt sicher, dass Padding und Border berücksichtigt werden */
+            border: none; /* Rahmenbreite und -farbe */
+            width: 100%; /* Volle Breite der Zelle */
+            font-weight: bold; /* Fettdruck für den Text */
+        }
+
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.1/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.min.js"></script>
+
+</head>
+
+<body>
+    <!-- Menüleiste -->
+  <div class="menu">
+    <bar onclick="switchPage('main')">
+    <span class="material-icons" style="font-size: 1.3dvw;">sync</span>
+    </bar>
+    <bar onclick="switchPage('berechnung')">
+	<span class="material-icons" style="font-size: 1.3dvw;">timeline</span>
+    </bar>
+    <bar onclick="switchPage('excel')">
+	<span class="material-icons" style="font-size: 1.3dvw;">dataset</span>
+    </bar>
+  </div>
+
+  <div id="page-berechnung" class="page active">
+    <div class="container">
+        <div class="sidebar" id="sidebar">
+            <div class="button-container">
+		    <div class="menu-input">
+        		<label for="distance-input">Startwert:</label>
+        		<input type="number" id="distance-input" value="0.0" step="0.1">
+    		    </div>
+                    <button onclick="exportToExcel()">
+                        <span class="material-icons" style="font-size: 1.3dvw;">file_download</span> DATEN EXPORTIEREN
+                    </button>
+                    <label for="file-input" class="file-input-label">
+                        <span class="material-icons" style="font-size: 1.3dvw;">upload</span> PDF HOCHLADEN
+                    </label>
+                    <input type="file" id="file-input" accept="application/pdf">
+            </div>
+            <div id="legend">
+                <strong>LEGENDE:</strong><br>
+                ESC: Modus verlassen<br>
+                LEERTASTE: Gleismitte einlesen<br>
+                TAB: Messpunkte einlesen<br>
+                C: Kalibriermodus<br>
+            </div>
+            <div id="info">Klicke auf das Canvas, um die Steuerung zu aktivieren. Bewege die Maus, um den Canvas zu verschieben.</div>
+        </div>
+            <div class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()">
+                <span class="material-icons" style="font-size: 1.5dvw;">menu</span>
+            </div>
+            <div id="canvas-container">
+                <div id="pdf-controls" style="margin: 1vw 0; display: flex; gap: 1vw; align-items: center;">
+                    <button id="prevPageBtn">Zurück</button>
+                    <span id="pageInfo">Seite 1 / 1</span>
+                    <button id="nextPageBtn">Weiter</button>
+                    <label for="file-input" class="file-input-label">
+                        <span class="material-icons" style="font-size: 1.3dvw;">upload</span> PDF HOCHLADEN
+                    </label>
+                    <input type="file" id="file-input" accept="application/pdf">
+                    <span id="file-name">Keine Datei hochgeladen</span>
+                    <button id="zoomOutBtn">-</button>
+                    <button id="zoomInBtn">+</button>
+                    <button id="rotateBtn">Seite drehen</button>
+                </div>
+                <canvas id="onscreen-canvas"></canvas>
+            </div>
+    </div>
+<script>
+
+        // === PAGED RENDERING SETUP ===
+    const onscreenCanvas = document.getElementById('onscreen-canvas');
+    const onscreenCtx = onscreenCanvas.getContext('2d');
+    const fileInput = document.getElementById('file-input');
+    const fileNameDisplay = document.getElementById('file-name');
+    const prevPageBtn = document.getElementById('prevPageBtn');
+    const nextPageBtn = document.getElementById('nextPageBtn');
+    const pageInfo = document.getElementById('pageInfo');
+    const zoomInBtn = document.getElementById('zoomInBtn');
+    const zoomOutBtn = document.getElementById('zoomOutBtn');
+
+    let pdfDocument = null;
+    let pdfFormat = 'portrait';
+    let userRotation = 0; // 0, 90, 180, 270
+    let currentPageNum = 1;
+    let totalPageCount = 1;
+    let renderScale = 1; // Passe diesen Wert für die gewünschte Auflösung an
+    let pdfRenderScale; // Startwert, wird dynamisch angepasst
+    let scaleFactor = 1; // Skalierungsfaktor für die PDF-Darstellung
+    let pdfPageCanvas = null;
+    let pdfPageCtx = null;
+    let zoomDebounceTimeout = null;
+    let rememberedPdfCenter = null;
+
+    let zoom = 1; // 1 = 100%, <1 = mehr sehen, >1 = reinzoomen
+    let points = []; // Array für die Punkte
+    let pageViewports = [];
+    let measurementPoints = [];
+    let recordingMode = false;
+    let measuringMode = false;
+    let calibrateMode = false;
+    let distanceDisplay = false;
+    let startDistance = 0; // Startdistanz nach Eingabe über Textfeld
+    let dotDistance = 0;
+    let currentIndex = 0;
+    let distanceScale = 1; // Skalierungsfaktor für die Entfernungsmessung
+    let distance = 0;
+    let scrollX = 0; // Scrollposition X
+    let scrollY = 0; // Scrollposition Y
+    let trackDirection = 'x'; // 'x' für Querformat, 'y' für Hochformat
+    let needsRender = false;
+    let crosshairVisible = true;
+    let calibrationOffsetX = 0; // Kalibrierungsverschiebung X
+    let calibrationOffsetY = 0; // Kalibrierungsverschiebung Y
+    let startKm = [];
+    let endKm = [];
+    let startAbst = [];
+    let endAbst = [];
+    let exportData = []; // Array für die Exportdaten
+    let pointCounter = 0;
+    let allTracks = [[]];  // Enthält alle Strecken
+    let activeTrackIndex = 0;  // Zeigt auf die aktive Strecke
+    let equationsPerTrack = [{}]; // Gleichungen für jede Strecke
+    let cableNames = ["Kabel 1"];
+    let trackNames = ["Strecke 1"];
+    let cableTracks = [[]];
+    let activeCableIndex = 0; // Zeigt auf die aktive Kabelstrecke
+    let renderingArray = []; // z.B. [{type: 'track', index: 0}, {type: 'cable', index: 1}]
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+
+    fileInput.addEventListener('change', handleFileUpload);
+    prevPageBtn.addEventListener('click', () => changePage(-1));
+    nextPageBtn.addEventListener('click', () => changePage(1));
+
+    document.querySelectorAll('input[name="pdfFormat"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            pdfFormat = this.value;
+            trackDirection = (pdfFormat === 'landscape') ? 'x' : 'y';
+            if (pdfDocument) renderCurrentPage();
+        });
+    });
+
+    document.getElementById('rotateBtn').addEventListener('click', async () => {
+        userRotation = (userRotation + 180) % 360;
+        await renderCurrentPage();
+    });
+
+    async function handleFileUpload(event) {
+        const file = event.target.files[0];
+        if (file && file.type === 'application/pdf') {
+            const fileReader = new FileReader();
+            fileReader.onload = async function () {
+                const pdfData = new Uint8Array(this.result);
+                pdfDocument = await pdfjsLib.getDocument({ data: pdfData }).promise;
+                totalPageCount = pdfDocument.numPages;
+                currentPageNum = 1;
+                fileNameDisplay.textContent = `Datei: ${file.name}`;
+                onscreenCanvas.width = onscreenCanvas.clientWidth;
+                onscreenCanvas.height = onscreenCanvas.clientHeight;
+                await renderCurrentPage();
+                drawVisibleRegion();
+            };
+            fileReader.readAsArrayBuffer(file);
+        } else {
+            fileNameDisplay.textContent = 'Bitte eine gültige PDF-Datei hochladen.';
+        }
+    }
+
+    async function renderCurrentPage(scaleFactor = 1) {
+        if (!pdfDocument) return;
+        const page = await pdfDocument.getPage(currentPageNum);
+
+        // PDF-Seitengröße bei scale 1
+        const origViewport = page.getViewport({ scale: 1, rotation: 0 });
+        let rotation = 0;
+
+        // Prüfe, ob die Ausrichtung der Seite zur Auswahl passt
+        const isPdfPortrait = origViewport.height >= origViewport.width;
+        const wantPortrait = pdfFormat === 'portrait';
+
+        // Wenn Ausrichtung nicht passt, drehe um 90°
+        if (isPdfPortrait !== wantPortrait) {
+            rotation = 90;
+        }
+
+        rotation = (rotation + userRotation) % 360;
+
+        // Nutze den größeren Wert, damit die Seite immer scharf bleibt
+        let dynamicScale = Math.max(
+            1,
+            1 + (zoom * 1.5)
+        );
+        dynamicScale = Math.min(dynamicScale, 4); // Maximal 4x (Performance)
+        console.log('Dynamic Scale:', dynamicScale);
+        pdfRenderScale = dynamicScale;
+
+        const viewport = page.getViewport({ scale: pdfRenderScale, rotation: rotation });
+        pdfPageCanvas = document.createElement('canvas');
+        pdfPageCanvas.width = viewport.width;
+        pdfPageCanvas.height = viewport.height;
+        console.log('PDF Size:', pdfPageCanvas.width, 'Viewport Size:', viewport.width, 'x', viewport.height, 'Canvas: ', onscreenCanvas.width, 'pls: ', onscreenCanvas.height);
+        pdfPageCtx = pdfPageCanvas.getContext('2d');
+
+        await page.render({
+            canvasContext: pdfPageCtx,
+            viewport: viewport
+        }).promise;
+        
+        drawVisibleRegion(scaleFactor);
+
+        // Seiteninfo aktualisieren
+        pageInfo.textContent = `Seite ${currentPageNum} / ${totalPageCount}`;
+        prevPageBtn.disabled = currentPageNum === 1;
+        nextPageBtn.disabled = currentPageNum === totalPageCount;
+    }
+
+    function changePage(delta) {
+        if (!pdfDocument) return;
+        const newPage = currentPageNum + delta;
+        if (newPage >= 1 && newPage <= totalPageCount) {
+            currentPageNum = newPage;
+            renderCurrentPage();
+            drawVisibleRegion();
+        }
+    }
+
+    function drawAllOverlays(scaleFactor = 1) {
+        renderingArray.forEach(item => {
+            if (item.type === 'track') {
+                const track = allTracks[item.index];
+                const color = getColorForTrack(item.index);
+                let dotDistance = 0;
+                for (let i = 0; i < track.length; i++) {
+                    const point = track[i];
+                    if (i > 0) {
+                        dotDistance += getDistance(track[i - 1].x, track[i - 1].y, track[i].x, track[i].y) * distanceScale;
+                        drawLine(track[i - 1], track[i], onscreenCtx, color, scaleFactor);
+                    }
+                    drawPoint(point.x, point.y, color, onscreenCtx, startDistance + dotDistance / 1000, true, scaleFactor);
+                }
+            } else if (item.type === 'cable') {
+                const cableTrack = cableTracks[item.index];
+                cableTrack.forEach(point => {
+                    drawPoint(point.x, point.y, 'purple', onscreenCtx, null, scaleFactor);
+                });
+            }
+        });
+
+        // Crosshair in der Mitte, falls aktiv
+        if (document.pointerLockElement === onscreenCanvas && crosshairVisible) {
+            drawCrosshair(onscreenCanvas.width / 2, onscreenCanvas.height / 2, onscreenCtx);
+        }
+    }
+
+    function drawVisibleRegion(scaleFactor = 1) {
+        // Setze Canvas-Pixelgröße auf CSS-Größe für scharfe Darstellung
+        onscreenCanvas.width = onscreenCanvas.clientWidth;
+        onscreenCanvas.height = onscreenCanvas.clientHeight;
+
+        const w = onscreenCanvas.width;
+        const h = onscreenCanvas.height;
+        const renderScale = pdfRenderScale;
+
+        // Sichtbarer Bereich in PDF-Pixeln (bei renderScale)
+        const srcW = w / (zoom * renderScale);
+        const srcH = h / (zoom * renderScale);
+        const srcX = scrollX - srcW / 2;
+        const srcY = scrollY - srcH / 2;
+
+        if (rememberedPdfCenter) {
+            // Wenn ein Zentrum gespeichert ist, setze scrollX/Y auf die Mitte des Canvas
+            scrollX = rememberedPdfCenter.x * scaleFactor;
+            scrollY = rememberedPdfCenter.y * scaleFactor;
+            rememberedPdfCenter = null;
+        }
+
+        // Crosshair soll bis zum Rand der PDF gehen:
+        const minScrollX = 0;
+        const maxScrollX = pdfPageCanvas.width;
+        const minScrollY = 0;
+        const maxScrollY = pdfPageCanvas.height;
+
+        console.log('Scroll Limits:', minScrollX, maxScrollX, minScrollY, maxScrollY);
+
+        // Begrenze scrollX/scrollY auf die Grenzen der PDF-Seite
+        scrollX = Math.max(minScrollX, Math.min(scrollX, maxScrollX));
+        scrollY = Math.max(minScrollY, Math.min(scrollY, maxScrollY));
+
+        onscreenCtx.clearRect(0, 0, w, h);
+        onscreenCtx.imageSmoothingEnabled = true;
+        onscreenCtx.imageSmoothingQuality = "high";
+        onscreenCtx.drawImage(
+            pdfPageCanvas,
+            srcX, srcY, srcW, srcH,
+            0, 0, w, h
+        );
+
+        drawAllOverlays(scaleFactor);
+
+        if (
+            isNaN(scrollX) || isNaN(scrollY) ||
+            isNaN(minScrollX) || isNaN(maxScrollX) ||
+            isNaN(minScrollY) || isNaN(maxScrollY)
+        ) {
+            console.warn('Ungültige Scrollwerte:', { scrollX, scrollY, minScrollX, maxScrollX, minScrollY, maxScrollY });
+        }
+    }
+
+    // Optional: Tastatursteuerung (Pfeiltasten)
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'ArrowLeft') changePage(-1);
+        if (event.key === 'ArrowRight') changePage(1);
+    });
+
+    zoomInBtn.addEventListener('click', async () => {
+        const previousZoom = zoom;
+        zoom = Math.round(Math.min(zoom + 0.1, 2) * 10) / 10;
+        const previousScale = Math.round((1 + 1.5 * previousZoom)*100) / 100; // Vorheriger Skalierungsfaktor
+        const newScale = Math.round((1 + 1.5 * zoom) * 100) / 100;
+        const factor = (newScale / previousScale);
+        console.log('Previous Zoom:', previousZoom, 'New Zoom:', zoom, 'Previous Scale:', previousScale, 'New Scale:', newScale, 'Factor:', factor);
+        rememberedPdfCenter = {
+            x: scrollX,
+            y: scrollY
+        };
+        console.log('Zoom:', zoom, 'Scale:', factor, 'Remembered Center:', rememberedPdfCenter, 'Coordinates: ', scrollX + (onscreenCanvas.width / 2), 'Canvas: ', onscreenCanvas.width, 'pls: ', onscreenCanvas.height);
+        await renderCurrentPage(factor);
+    });
+    zoomOutBtn.addEventListener('click', async () => {
+        zoom = Math.max(zoom / 1.1, 0.5);
+        const renderScale = Math.max(pdfRenderScale - 1, 1);
+        rememberedPdfCenter = {
+            x: scrollX,
+            y: scrollY
+        };
+        console.log('Zoom:', zoom, 'Render Scale:', renderScale, 'Remembered Center:', rememberedPdfCenter);
+        await renderCurrentPage();
+    });
+
+    function addPointToTrack(x, y) {
+        const track = allTracks[activeTrackIndex];
+        track.push({ x, y });
+    }
+
+
+    fileInput.addEventListener('change', handleFileUpload);
+
+        // Event Listener für Mausklicks auf dem Onscreen-Canvas
+        onscreenCanvas.addEventListener('click', requestPointerLock);
+
+        function requestPointerLock() {
+            onscreenCanvas.requestPointerLock();
+        }
+
+        // Mausbewegungen zum Scrollen verwenden
+        document.addEventListener('mousemove', (event) => {
+            if (document.pointerLockElement === onscreenCanvas) {
+                // Umkehren der Bewegungsrichtung
+                scrollX += event.movementX;
+                scrollY += event.movementY;
+                drawVisibleRegion(scaleFactor);
+
+                if (crosshairVisible) {
+                    drawCrosshair(onscreenCanvas.width / 2, onscreenCanvas.height / 2, onscreenCtx);
+                }
+            }
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.code === 'Space') {
+                recordingMode = !recordingMode;
+                toggleSwitch('switch1');
+                info.innerHTML = recordingMode ? 'Aufnahmemodus aktiviert.' : 'Aufnahmemodus beendet.';
+                event.preventDefault();
+            } else if (event.code === 'Tab') {
+                measuringMode = !measuringMode;
+                toggleSwitch('switch2');
+                info.innerHTML = measuringMode ? 'Messmodus aktiviert. Klicken Sie, um Messpunkte hinzuzufügen.' : 'Messmodus beendet. Berechnete Abstände werden angezeigt.';
+                if (!measuringMode) {
+                    calculateDistances(cableTracks[activeCableIndex], activeTrackIndex);
+                }
+                event.preventDefault();
+            } else if (event.code === 'KeyC') {
+                calibrateMode = !calibrateMode;
+                toggleSwitch('switch3');
+                info.innerHTML = calibrateMode ? 'Kalibrierungsmodus aktiviert.' : 'Kalibrierungsmodus beendet.';
+                event.preventDefault();
+            } else if (scalingMode && event.key === "Escape") {
+                scalingPoints = [];
+                endScalingMode();
+                event.preventDefault();
+            }
+        });
+
+        async function handleClick(event) {
+            const renderScale = pdfRenderScale;
+            const x = scrollX;
+            const y = scrollY;
+
+            if (calibrateMode && points.length > 0) {
+                const dx = x - points[0].x;
+                const dy = y - points[0].y;
+
+                // Aktualisiere den Kalibrierungsoffset
+                calibrationOffsetX += dx;
+                calibrationOffsetY += dy;
+
+                // Verschiebe den ersten Punkt und alle anderen entsprechend
+                points = points.map(p => ({ x: p.x + dx, y: p.y + dy }));
+                measurementPoints = measurementPoints.map(p => ({ x: p.x + dx, y: p.y + dy }));
+
+                // Rechne die Gleichungen neu
+                equationCount = 0;
+                equations = {};
+                for (let i = 1; i < points.length; i++) {
+                    calculateAndStoreLineEquation(points[i - 1], points[i]);
+                }
+
+                // PDF erneut rendern, unter Berücksichtigung der Kalibrierung
+                onscreenCtx.clearRect(0, 0, onscreenCanvas.width, onscreenCanvas.height);
+                points.forEach((point, index) => drawPoint(point.x, point.y, 'red', onscreenCtx, startDistance + dotDistance / 1000, true));
+                measurementPoints.forEach(point => drawPoint(point.x, point.y, 'purple', onscreenCtx, false));
+                Object.values(equations).forEach(eq => drawLine({ x: eq.x1, y: eq.y1 }, { x: eq.x2, y: eq.y2 }, onscreenCtx));
+                calculateDistances();
+
+                // Deaktiviere den Kalibriermodus nach der Kalibrierung
+                calibrateMode = false;
+                info.innerHTML = 'Kalibrierung abgeschlossen.';
+            } else if (recordingMode) {
+                const track = allTracks[activeTrackIndex];
+                const color = getColorForTrack(activeTrackIndex); // Funktion zum Erhalten der Farbe für die Strecke
+
+                let distanceSinceLast = 0;
+
+                if (track.length > 0) {
+                    const last = track[track.length - 1];
+                    distanceSinceLast = getDistance(last.x, last.y, x, y) * distanceScale;
+                }
+
+                dotDistance += distanceSinceLast;
+                const km = startDistance + dotDistance / 1000;
+
+                const point = { x, y, km }; // Speichere km direkt beim Punkt
+                addPointToTrack(x, y);
+
+                drawPoint(x, y, color, onscreenCtx, point.km.toFixed(3), true);
+                currentIndex++;
+                console.log(`Punkt gespeichert für Strecke ${activeTrackIndex + 1}: (${x}, ${y})`);
+
+                // Nur wenn >= 2 Punkte vorhanden: Linie + Gleichung berechnen
+                if (track.length >= 2) {
+                        const p1 = track[track.length - 2];
+                        const p2 = track[track.length - 1];
+                        drawLine(p1, p2, onscreenCtx, color);
+                        calculateAndStoreLineEquation(p1, p2, activeTrackIndex);
+                }
+
+            } else if (measuringMode) {
+                cableTracks[activeCableIndex].push({ x, y });
+                drawPoint(x, y, 'purple', onscreenCtx);
+                console.log(`Messpunkt gespeichert: (${x}, ${y})`);
+            } else if (scalingMode) {
+                scalingPoints.push({ x, y });
+                drawPoint(x, y, 'orange', onscreenCtx);
+
+                info.innerHTML = `Skalierungspunkt ${scalingPoints.length} gespeichert: (${x}, ${y})`;
+
+                if (scalingPoints.length === 2) {
+                    const dx = scalingPoints[1].x - scalingPoints[0].x;
+                    const dy = scalingPoints[1].y - scalingPoints[0].y;
+                    const pixelDist = Math.sqrt(dx * dx + dy * dy);
+                    let selectedValue = document.getElementById('scaleSelect').value;
+                    let realWorldDistance;
+
+                    if (selectedValue === 'custom') {
+                        realWorldDistance = parseFloat(document.getElementById('customScaleInput').value);
+                    } else {
+                        realWorldDistance = parseFloat(selectedValue);
+                    }
+
+                    if (!isNaN(realWorldDistance) && realWorldDistance > 0) {
+                        distanceScale = realWorldDistance / pixelDist;
+                        scalingMode = false; // Skalierung beenden
+                        document.exitPointerLock();
+                        switchPage('main');
+                        info.innerHTML += `<br>Skalierung abgeschlossen. 1 Pixel = ${distanceScale.toFixed(4)} m`;
+                        document.getElementById('scalingControls').style.display = 'none';
+
+                        // Ergebnisfeld anzeigen
+                        document.getElementById('scaleValue').textContent = distanceScale.toFixed(4);
+                        document.getElementById('scaleResult').style.display = 'block';
+
+                        endScalingMode();
+
+                    } else {
+                        info.innerHTML += `<br>Fehler: Ungültige Skalierungslänge.`;
+                        endScalingMode();
+                    }
+                }
+                return;
+            }
+        }
+
+        function drawPoint(worldX, worldY, color, ctx, label = null, scaleFactor = 1) {
+            const renderScale = pdfRenderScale;
+            const screenX = ((worldX - scrollX) * zoom * renderScale + (onscreenCanvas.width / 2)) * scaleFactor;
+            const screenY = ((worldY - scrollY)  * zoom * renderScale + (onscreenCanvas.height / 2)) * scaleFactor;
+
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(screenX, screenY, 5, 0, 2 * Math.PI);
+            ctx.fill();
+
+            if (label) {
+                ctx.fillStyle = 'black';
+                ctx.font = '12px Poppins';
+                ctx.textAlign = 'center';
+                const labelText = typeof label === 'number' ? label.toFixed(3) : label;
+                ctx.fillText(labelText, screenX, screenY - 10);
+            }
+        }
+
+        function drawLine(p1, p2, ctx, color = 'red', scaleFactor = 1) {
+            const renderScale = pdfRenderScale;
+            const x1 = ((p1.x - scrollX) * zoom * renderScale + (onscreenCanvas.width / 2)) * scaleFactor;
+            const y1 = ((p1.y - scrollY) * zoom * renderScale + (onscreenCanvas.height / 2)) * scaleFactor;
+            const x2 = ((p2.x - scrollX) * zoom * renderScale + (onscreenCanvas.width / 2)) * scaleFactor;
+            const y2 = ((p2.y - scrollY) * zoom * renderScale + (onscreenCanvas.height / 2)) * scaleFactor;
+
+            ctx.strokeStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+        }
+
+        function calculateAndStoreLineEquation(p1, p2, trackIndex) {
+            const m = ((p2.y - p1.y) / (p2.x - p1.x));
+            const n = (p1.y - m * p1.x);
+            const eqIndex = Object.keys(equationsPerTrack[trackIndex]).length + 1;
+
+            equationsPerTrack[trackIndex][`y${eqIndex}`] = {
+                m: parseFloat(m),
+                n: parseFloat(n),
+                x1: p1.x,
+                x2: p2.x,
+                y1: p1.y,
+                y2: p2.y
+            };
+
+            const eqText = `Strecke ${trackIndex + 1} – y${eqIndex} = ${m.toFixed(2)}x + ${n.toFixed(2)}`;
+            console.log(eqText);
+            info.innerHTML = eqText;
+        }
+
+        function calculateDistances(cablePoints, trackIndex) {
+    const track = allTracks[trackIndex];
+    if (!track || track.length < 2) return;
+
+    if (!distanceScale || isNaN(distanceScale) || distanceScale <= 0) {
+        info.innerHTML += "<br><b>Fehler: Maßstab (distanceScale) ist nicht gesetzt!</b>";
+        return;
+    }
+
+    startKm = [];
+    endKm = [];
+    startAbst = [];
+    endAbst = [];
+
+    // Für jeden Abschnitt zwischen zwei Messpunkten
+    for (let i = 0; i < cablePoints.length - 1; i++) {
+        const pointA = cablePoints[i];
+        const pointB = cablePoints[i + 1];
+
+        // Berechne für beide Punkte die Projektion auf die Strecke und den km-Wert
+        const projA = getProjectionOnTrack(pointA, track);
+        const projB = getProjectionOnTrack(pointB, track);
+
+        startKm.push(projA.km);
+        startAbst.push(projA.abst);
+        endKm.push(projB.km);
+        endAbst.push(projB.abst);
+
+        // Optional: Visualisierung
+        drawPerpendicularLine(pointA, projA.proj, onscreenCtx);
+        drawPerpendicularLine(pointB, projB.proj, onscreenCtx);
+    }
+
+    exportData = [];
+    fillexportData();
+    const teiltrasseWerte = getTeiltrasseWerte();
+    renderExportDataToTable(exportData, teiltrasseWerte);
+}
+
+// Hilfsfunktion: Projektion und km-Berechnung für einen Punkt
+function getProjectionOnTrack(point, track) {
+    let minDist = Infinity;
+    let bestProj = null;
+    let bestSegIdx = -1;
+    let bestT = 0;
+
+    let kmSoFar = startDistance;
+    for (let i = 1; i < track.length; i++) {
+        const p1 = track[i - 1];
+        const p2 = track[i];
+        const dx = p2.x - p1.x;
+        const dy = p2.y - p1.y;
+        const segLen = Math.sqrt(dx * dx + dy * dy);
+
+        if (segLen === 0) continue;
+
+        const t = ((point.x - p1.x) * dx + (point.y - p1.y) * dy) / (segLen * segLen);
+        let proj;
+        if (t < 0) {
+            proj = { x: p1.x, y: p1.y, t: 0 };
+        } else if (t > 1) {
+            proj = { x: p2.x, y: p2.y, t: 1 };
+        } else {
+            proj = { x: p1.x + t * dx, y: p1.y + t * dy, t };
+        }
+        const dist = Math.sqrt(Math.pow(point.x - proj.x, 2) + Math.pow(point.y - proj.y, 2));
+        if (dist < minDist) {
+            minDist = dist;
+            bestProj = proj;
+            bestSegIdx = i - 1;
+            bestT = proj.t;
+        }
+    }
+
+    // Kilometerposition berechnen
+    let km = startDistance;
+    for (let i = 1; i <= bestSegIdx; i++) {
+        const p1 = track[i - 1];
+        const p2 = track[i];
+        km += getDistance(p1.x, p1.y, p2.x, p2.y) * distanceScale / 1000;
+    }
+    if (bestProj && bestSegIdx >= 0) {
+        const p1 = track[bestSegIdx];
+        const p2 = track[bestSegIdx + 1];
+        const segLen = getDistance(p1.x, p1.y, p2.x, p2.y);
+        km += bestT * segLen * distanceScale / 1000;
+    }
+
+    const abst = minDist * distanceScale;
+    return { km, abst, proj: bestProj };
+}
+
+        /*function calculateDistances(cablePoints, trackIndex) {
+            const equations = equationsPerTrack[activeTrackIndex];
+
+            cablePoints.forEach((point, index) => {
+                let minDistance = Infinity;
+                let closestEquation = '';
+                let closestPoint = { x: 0, y: 0 };
+                pointCounter = index;
+                
+                for (const [key, eq] of Object.entries(equations)) {
+                    const { m, n, x1, x2, y1, y2 } = eq;
+                    const minX = Math.min(x1, x2);
+                    const maxX = Math.max(x1, x2);
+                    const minY = Math.min(y1, y2);
+                    const maxY = Math.max(y1, y2);
+
+                    if (point.x >= Math.min(x1, x2) && point.x <= Math.max(x1, x2)) {
+                        const perpendicularX = (point.x + m * point.y - m * n) / (m * m + 1);
+                        const perpendicularY = (m * point.x + (m * m * point.y) + n) / (m * m + 1);
+
+                        if (perpendicularX >= minX && perpendicularX <= maxX && perpendicularY >= minY && perpendicularY <= maxY) {
+                            const distance = Math.abs(m * point.x - point.y + n) / Math.sqrt(m * m + 1);
+                            if (distance < minDistance) {
+                                minDistance = distance;
+                                closestEquation = key;
+                                closestPoint = { x: perpendicularX, y: perpendicularY };
+                            }
+                        }
+                    }
+                }
+
+                if (minDistance == Infinity) {
+                    console.log(`Kein passender Punkt für Punkt ${index + 1} (${point.x}, ${point.y}) gefunden.`);
+                    
+                    let distances =  [];
+                    for (const track of allTracks) {
+                        for (const trackPoint of track) {
+                            distances.push({
+                                    dist: Math.sqrt(Math.pow(point.x - trackPoint.x, 2) + Math.pow(point.y - trackPoint.y, 2)), 
+                                    trackX:trackPoint.x, 
+                                    trackY:trackPoint.y 
+                                }
+                            );
+                        }
+                    }
+                    distances.sort((a, b) => a.dist - b.dist);
+                    minDistance = distances[0].dist;
+                    closestPoint = { x: distances[0].trackX, y: distances[0].trackY };
+
+                    console.log(distances);
+                    const dx = point.x - closestPoint.x;
+                    const dy = point.y - closestPoint.y;
+                    const m = dy / dx || 0; // Absicherung gegen Division durch 0
+                    const n = closestPoint.y - m * closestPoint.x;
+
+                    // Verwende temporären Schlüssel für die Gleichung
+                    closestEquation = `temp_${index}`;
+                    equations[closestEquation] = {
+                        m: m,
+                        n: n,
+                        x1: closestPoint.x,
+                        y1: closestPoint.y,
+                        x2: point.x,
+                        y2: point.y
+                    }
+                }
+
+                const distanceInMeters = (minDistance * distanceScale); // Abstand in Metern
+                console.log(`Minimale Entfernung des Punktes ${index + 1} (${point.x}, ${point.y}) zu Gleichung ${closestEquation}: ${distanceInMeters} Meter an Punkt (${closestPoint.x.toFixed(2)}, ${closestPoint.y.toFixed(2)})`);
+                info.innerHTML += `<br>Punkt ${index + 1}: Abstand zu ${closestEquation} = ${distanceInMeters.toFixed(2)} Meter`;
+
+                const equationIndex = parseInt(closestEquation.replace('y', ''), 10); // Index der Gleichung
+                console.log(equationIndex);
+                const startFunctionDistance = startDistance + (equationIndex - 1) * 0.1; // Startkilometer der aktuellen Funktion
+                const eq = equations[closestEquation];
+                const { x1, y1, x2, y2 } = eq;
+
+                // Berechne die Distanz entlang der Funktion zwischen den beiden Endpunkten
+                const functionLength = getDistance(x1, y1, x2, y2); // Distanz zwischen Start- und Endpunkt der Funktion in Metern
+
+                // Berechne den Abstand vom Startpunkt der Funktion zum closestPoint
+                const closestPointDistanceOnFunction = getDistance(x1, y1, closestPoint.x, closestPoint.y);
+
+                // Berechne den Anteil der Distanz des closestPoint an der gesamten Funktion
+                const percentageOfFunction = closestPointDistanceOnFunction / functionLength; // Anteil in Prozent
+
+                // Berechne den genauen Kilometer auf der Funktion
+                const closestPointDistanceOnTrack = startFunctionDistance + (percentageOfFunction * 0.1);
+
+                console.log(`Der nächste Punkt befindet sich bei Kilometer: ${closestPointDistanceOnTrack.toFixed(5)}`);
+
+                info.innerHTML += `<br>Punkt ${index + 1}: Abstand zu ${closestEquation} = ${distanceInMeters.toFixed(2)} Meter (Kilometer: ${closestPointDistanceOnTrack.toFixed(5)})`;
+
+                drawPerpendicularLine(point, closestPoint, onscreenCtx);
+
+                if (pointCounter === 1) {
+                    // Wenn der PunktCounter größer als 1 ist, haben wir mindestens 2 Punkte
+                    // Den letzten Messpunkt als Endpunkt des aktuellen Teilstücks setzen
+                    endKm.push(closestPointDistanceOnTrack);
+                    endAbst.push(distanceInMeters);
+
+                } else if (pointCounter === 0) {
+                    // Wenn nur ein Punkt vorhanden ist, haben wir noch kein Teilstück
+                    // Initialisiere das erste Teilstück
+                    startKm.push(closestPointDistanceOnTrack);
+                    startAbst.push(distanceInMeters);
+                } else if (pointCounter > 1) {
+                    endKm.push(closestPointDistanceOnTrack);
+                    endAbst.push(distanceInMeters);
+                    startKm.push(endKm[endKm.length - 2]);
+                    startAbst.push(endAbst[endAbst.length - 2]);
+                }
+
+                console.log(endKm);
+                console.log(startKm);
+                console.log(endAbst);   
+
+                pointCounter++;
+            });
+
+            exportData = [];
+            fillexportData();
+            const teiltrasseWerte = getTeiltrasseWerte();
+            renderExportDataToTable(exportData, teiltrasseWerte);
+            console.log(exportData);
+        }*/
+
+        function fillexportData() {
+
+                for (let i = 0; i < startKm.length; i++) {
+                    console.log('startKm:', startKm);
+                    console.log('endKm:', endKm);
+                    console.log('startAbst:', startAbst);
+                    console.log('endAbst:', endAbst);
+                    exportData.push([
+                        "1a",              // Teiltrasse
+                        i + 1,             // Abschnitt-Nummer
+                        startKm[i].toFixed(3).replace('.', ','),        // Start-km
+                        endKm[i].toFixed(3).replace('.', ','),          // End-km
+                        startAbst[i].toFixed(3).replace('.', ','),      // Start-Abstand
+                        endAbst[i].toFixed(3).replace('.', ',')         // End-Abstand
+                    ]);
+                }
+        }
+
+        function getDistance(x1, y1, x2, y2) {
+            return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+        }
+
+        function drawPerpendicularLine(p1, p2, ctx, scaleFactor = 1) {
+            const renderScale = pdfRenderScale;
+            const x1 = (p1.x - scrollX) * scaleFactor * zoom * renderScale + (onscreenCanvas.width / 2);
+            const y1 = (p1.y - scrollY) * scaleFactor * zoom * renderScale + (onscreenCanvas.height / 2);
+            const x2 = (p2.x - scrollX) * scaleFactor * zoom * renderScale + (onscreenCanvas.width / 2);
+            const y2 = (p2.y - scrollY) * scaleFactor * zoom * renderScale + (onscreenCanvas.height / 2);
+
+            ctx.strokeStyle = 'purple';
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+        }
+
+        function drawCrosshair(x, y, ctx) {
+            ctx.strokeStyle = 'black';
+            ctx.beginPath();
+            ctx.moveTo(x - 10, y);
+            ctx.lineTo(x + 10, y);
+            ctx.moveTo(x, y - 10);
+            ctx.lineTo(x, y + 10);
+            ctx.stroke();
+        }
+
+
+        // Event Listener für Mausklicks auf dem Onscreen-Canvas zum Zeichnen von Punkten
+        onscreenCanvas.addEventListener('click', handleClick);
+
+        function clearConsole() {
+            console.clear();
+        }
+
+        function clearValues() {
+            points = [];
+            measurementPoints = [];
+            equations = {};
+            equationCount = 0;
+            recordingMode = false;
+            measuringMode = false;
+            calibrateMode = false;
+            scrollX = 0;
+            scrollY = 0;
+            calibrationOffsetX = 0;
+            calibrationOffsetY = 0;
+            distanceScale = 1;
+            startKm = [];
+            endKm = [];
+            startAbst = [];
+            endAbst = [];
+            pointCounter = 0;
+            info.innerHTML = "Klicke auf das Canvas, um die Steuerung zu aktivieren. Bewege die Maus, um den Canvas zu verschieben.";
+            clearConsole();
+            console.log("Alle Werte wurden zurückgesetzt.");
+        }
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const sidebarToggle = document.getElementById('sidebar-toggle');
+            const canvasContainer = document.getElementById('canvas-container');
+            const info = document.getElementById('info');
+
+            sidebar.classList.toggle('open');
+            sidebarToggle.classList.toggle('open');
+
+            if (sidebar.classList.contains('open')) {
+                // Sidebar ist geöffnet, verkleinere die Breite des Canvas und Info
+                canvasContainer.style.width = '70%'; // Verkleinert auf 70% der Gesamtbreite
+                info.style.width = '70%';
+		menu.style.width = '70%';
+            } else {
+                // Sidebar ist geschlossen, setze die Breite zurück auf 90%
+                canvasContainer.style.width = '90%';
+                info.style.width = '90%';
+		menu.style.width = '90%';
+            }
+        }
+
+        function toggleSwitch(switchId) {
+            const checkbox = document.getElementById(switchId);
+            if (checkbox) {
+                checkbox.checked = !checkbox.checked;
+            }
+        }
+
+        const pDatenMapping = {
+            0: { 1: 'B2' }, // Zeile 0, Spalte 1 -> Zelle B2
+            1: { 1: 'B3' }, // Zeile 1, Spalte 1 -> Zelle B3
+            2: { 1: 'B4' }, // Zeile 2, Spalte 1 -> Zelle B4
+            3: { 1: 'B6' }, // Zeile 4, Spalte 1 -> Zelle B6
+            4: { 1: 'D23' }, // Zeile 21, Spalte 3 -> Zelle D23
+            5: { 1: 'B11' }, // Zeile 9, Spalte 1 -> Zelle B11
+            6: { 1: 'B12' }, // Zeile 10, Spalte 1 -> Zelle B12
+            7: { 1: 'B13' }, // Zeile 11, Spalte 1 -> Zelle B13
+            8: { 1: 'B14' }, // Zeile 12, Spalte 1 -> Zelle B14
+            9: { 1: 'B15' }, // Zeile 13, Spalte 1 -> Zelle B15
+            10: { 1: 'B42' } // Zeile 40, Spalte 1 -> Zelle B42
+        };
+
+        const sDatenMapping = {
+            1: {
+                0: 'A8',
+                1: 'B8',
+                2: 'C8',
+                3: 'D8',
+                4: 'E8',
+                5: 'F8',
+                6: 'G8',
+                7: 'H8',
+                8: 'I8',
+                9: 'J8',
+                10: 'K8'
+            }
+        };
+
+        const aDatenMapping = {
+            1: { 
+                0: 'A8',
+                1: 'B8',
+                2: 'C8',
+                3: 'D8',
+                4: 'E8',
+                5: 'F8'
+            }
+        };
+
+        function exportTablesToExcel() {
+            // Neues Arbeitsbuch erstellen
+            const wb = XLSX.utils.book_new();
+
+            // P-Daten Sheet
+            const pDatenSheet = createSheetFromTableWithPositions('dataPTable', pDatenMapping);
+            applyStylingToSheet(pDatenSheet, 'P-Daten');
+            XLSX.utils.book_append_sheet(wb, pDatenSheet, "P-Daten");
+
+            // S-Daten Sheet
+            const sDatenSheet = createSheetFromTableWithPositions('dataSTable', sDatenMapping);
+            applyStylingToSheet(sDatenSheet, 'S-Daten');
+            XLSX.utils.book_append_sheet(wb, sDatenSheet, "S-Daten");
+
+            // 1A-Daten Sheet
+            const aDatenSheet = createSheetFromTableWithPositions('data1ATable', aDatenMapping);
+            applyStylingToSheet(aDatenSheet, '1A-Daten');
+            XLSX.utils.book_append_sheet(wb, aDatenSheet, "1A-Daten");
+
+            // Zusätzliche Sheets mit Headern
+            const additionalSheet1 = createEmptySheetWithHeaders("Zusätzliche Daten 1", ["Header 1", "Header 2", "Header 3"]);
+            XLSX.utils.book_append_sheet(wb, additionalSheet1, "Zusatz 1");
+
+            const additionalSheet2 = createEmptySheetWithHeaders("Zusätzliche Daten 2", ["Spalte A", "Spalte B", "Spalte C", "Spalte D"]);
+            XLSX.utils.book_append_sheet(wb, additionalSheet2, "Zusatz 2");
+
+            // Datei exportieren
+            XLSX.writeFile(wb, "Exportierte_Daten.xlsx");
+        }
+
+        function createSheetFromTableWithPositions(tableId, cellMapping) {
+            const table = document.getElementById(tableId);
+            const rows = Array.from(table.querySelectorAll('tr'));
+            const sheet = {};
+
+            // Tabellenzeilen durchlaufen
+            rows.forEach((row, rowIndex) => {
+                const cells = Array.from(row.querySelectorAll('td, th'));
+                cells.forEach((cell, colIndex) => {
+
+                    const input = cell.querySelector('input, select');
+                    const value = input ? input.value : cell.textContent.trim();
+
+                    // Debugging: Überprüfen, ob rowIndex und colIndex in cellMapping vorhanden sind
+                    if (!cellMapping[rowIndex]) {
+                        console.warn(`Zeile ${rowIndex} ist nicht in cellMapping definiert.`);
+                        return; // Überspringe diese Zeile
+                    }
+
+                    if (!cellMapping[rowIndex][colIndex]) {
+                        console.warn(`Spalte ${colIndex} in Zeile ${rowIndex} ist nicht in cellMapping definiert.`);
+                        return; // Überspringe diese Spalte
+                    }
+
+                    // Zellenposition aus der Mapping-Tabelle holen
+                    const cellPosition = cellMapping[rowIndex][colIndex];
+                    if (cellPosition) {
+                        sheet[cellPosition] = { v: value };
+                    }
+                });
+            });
+
+            // Bereich des Arbeitsblatts definieren
+            sheet['!ref'] = calculateSheetRange(sheet);
+            return sheet;
+        }
+
+        // Hilfsfunktion: Bereich des Arbeitsblatts berechnen
+        function calculateSheetRange(sheet) {
+            const cellAddresses = Object.keys(sheet).filter(key => !key.startsWith('!'));
+            const startCell = cellAddresses[0];
+            const endCell = cellAddresses[cellAddresses.length - 1];
+            return `${startCell}:${endCell}`;
+        }
+
+        function applyStylingToSheet(sheet, sheetName) {
+            // Definiere den Bereich des Arbeitsblatts
+            sheet['!ref'] = 'A1:N57';
+
+            // Zellbereich mergen (z. B. für Überschriften)
+            sheet['!merges'] = [
+                { s: { r: 0, c: 0 }, e: { r: 0, c: 1 } } // A1:B1
+            ];
+
+            // Spaltenbreiten festlegen
+            sheet['!cols'] = [
+                { wch: 25 }, // Spalte A
+                { wch: 25 }, // Spalte B
+                { wch: 5 }, // Spalte C
+                { wch: 25 }, // Spalte D
+                { wch: 25 }, // Spalte E
+                { wch: 25 }, // Spalte F
+                { wch: 25 }  // Spalte G
+            ];
+
+            // Sheet-spezifisches Styling
+            if (sheetName === 'P-Daten') {
+                sheet['A1'] = {
+                    v: 'BEPRO-BAHN-PROJEKTDATEI',
+                    s: {
+                        font: { bold: true, sz: 14 },
+                        alignment: { horizontal: 'center' },
+                        fill: { fgColor: { rgb: 'FFA500' } } // Orange Hintergrund
+                    }
+                };
+            } else if (sheetName === 'S-Daten') {
+                sheet['A1'] = {
+                    v: 'Stromsystem-Daten',
+                    s: {
+                        font: { bold: true, sz: 14 },
+                        alignment: { horizontal: 'center' },
+                        fill: { fgColor: { rgb: 'CFEAD1' } } // Grünlicher Hintergrund
+                    }
+                };
+            } else if (sheetName === '1A-Daten') {
+                sheet['A1'] = {
+                    v: '1A-Daten Übersicht',
+                    s: {
+                        font: { bold: true, sz: 14 },
+                        alignment: { horizontal: 'center' },
+                        fill: { fgColor: { rgb: 'ADD8E6' } } // Blauer Hintergrund
+                    }
+                };
+            }
+        }
+
+        function createEmptySheetWithHeaders(sheetTitle, headers) {
+            const sheet = {};
+
+            // Titel in die erste Zeile schreiben
+            sheet['A1'] = {
+                v: sheetTitle,
+                s: {
+                    font: { bold: true, sz: 14 },
+                    alignment: { horizontal: 'center' },
+                    fill: { fgColor: { rgb: 'FFA500' } } // Orange Hintergrund
+                }
+            };
+
+            // Header in die zweite Zeile schreiben
+            headers.forEach((header, index) => {
+                const col = String.fromCharCode(65 + index); // A, B, C, ...
+                sheet[`${col}2`] = {
+                    v: header,
+                    s: {
+                        font: { bold: true },
+                        alignment: { horizontal: 'center' },
+                        fill: { fgColor: { rgb: 'CFEAD1' } } // Grünlicher Hintergrund
+                    }
+                };
+            });
+
+            // Bereich des Arbeitsblatts definieren
+            const lastCol = String.fromCharCode(65 + headers.length - 1); // Letzte Spalte basierend auf der Header-Anzahl
+            sheet['!ref'] = `A1:${lastCol}10`; // Bereich von A1 bis zur letzten Spalte (z. B. A1:D10)
+
+            // Spaltenbreiten festlegen
+            sheet['!cols'] = headers.map(() => ({ wch: 20 })); // Alle Spalten auf Breite 20 setzen
+
+            return sheet;
+        }
+
+        function renderExportDataToTable(data, teiltrasseOptions) {
+            const table = document.getElementById("data1ATable");
+
+            // ❌ Dummy-Zeile und alle Datenzeilen entfernen (Header bleibt)
+            while (table.rows.length > 1) {
+                table.deleteRow(1);
+            }
+
+            // ✅ Neue Zeilen basierend auf dem exportData-Array
+            data.forEach((rowData, rowIndex) => {
+                const tr = document.createElement("tr");
+
+                rowData.forEach((cellValue, colIndex) => {
+                    const td = document.createElement("td");
+
+                    // 👈 Teiltrasse-Spalte (Dropdown)
+                    if (colIndex === 0 && Array.isArray(teiltrasseOptions)) {
+                        const select = document.createElement("select");
+
+                        teiltrasseOptions.forEach(optVal => {
+                            const option = document.createElement("option");
+                            option.value = optVal;
+                            option.textContent = optVal;
+                            if (optVal === cellValue) {
+                                option.selected = true;
+                            }
+                            select.appendChild(option);
+                        });
+
+                        td.appendChild(select);
+                    } else {
+                        // ✍️ Andere Spalten: Input-Felder
+                        const input = document.createElement("input");
+                        input.type = colIndex === 1 ? "number" : "text";
+                        input.value = cellValue;
+                        td.appendChild(input);
+                    }
+
+                    tr.appendChild(td);
+                });
+
+                table.appendChild(tr);
+            });
+        }
+
+        let teiltrasseIndex = 2;
+
+        function addRowToKTable() {
+            const table = document.getElementById('dataKTable');
+            const templateRow = document.getElementById('kTableTemplateRow');
+            const clone = templateRow.cloneNode(true);
+            clone.removeAttribute('id');
+
+            // Teiltrasse setzen
+            clone.querySelector('td input[type="text"]').value = `1${String.fromCharCode(96 + teiltrasseIndex++)}`;
+
+            // Alle number-Felder und select zurücksetzen
+            clone.querySelectorAll('input[type="number"]').forEach(input => input.value = '');
+            clone.querySelector('select').value = '0';
+
+            table.appendChild(clone);
+        }
+        
+        function switchTrack(index) {
+            if (index >= 0 && index < allTracks.length) {
+                activeTrackIndex = index;
+                renderAllTracks();  // optional: alle anzeigen
+            }
+        }
+
+        function newTrack() {
+            addPointToTrack([]);
+            equationsPerTrack.push({});
+            activeTrackIndex = allTracks.length - 1;
+            console.log(`Neue Strecke gestartet (Index: ${activeTrackIndex})`);
+            dotDistance = 0;
+            currentIndex = 0;
+        }
+
+        function getColorForTrack(index) {
+            const colors = ['red', 'blue', 'green', 'orange', 'purple', 'teal', 'brown', 'pink'];
+            return colors[index % colors.length];
+        }
+
+        function newCableTrack() {
+            cableTracks.push([]);
+            activeCableIndex = cableTracks.length - 1;
+        }
+
+        function switchCable(index) {
+            if (index >= 0 && index < cableTracks.length) {
+                activeCableIndex = index;
+                // ggf. rendern
+            }
+        }
+
+        function showSheet(sheetName) {
+            const sheets = document.querySelectorAll('.sheet-content');
+            sheets.forEach(sheet => {
+                sheet.classList.remove('sheet-active');
+                if (sheet.id === `sheet-${sheetName}`) {
+                    sheet.classList.add('sheet-active');
+                }
+            });
+        }
+
+        function show1AData() {
+            const table = document.getElementById("data1ATable");
+            const rows = table.querySelectorAll("tr:not(:first-child)"); // Alle Zeilen außer der Kopfzeile
+            rows.forEach(row => row.style.display = "none"); // Alle Zeilen ausblenden
+
+            const teiltrasseWerte = getTeiltrasseWerte();
+            renderExportDataToTable(exportData, teiltrasseWerte);
+        }
+
+        function getTeiltrasseWerte() {
+            const selectElements = document.querySelectorAll("#data1ATable select");
+            return Array.from(selectElements).map(select => select.value);
+        }   
+
+        function renderAllTracks() {
+            render(true); // Hintergrund und PDF zeichnen
+            let dotDistance = 0;
+
+            allTracks.forEach((track, trackIndex) => {
+                const color = getColorForTrack(trackIndex);
+
+                for (let i = 0; i < track.length; i++) {
+                    const point = track[i];
+                    if (i > 0) {
+                        dotDistance += getDistance(track[i - 1].x, track[i - 1].y, track[i].x, track[i].y) * distanceScale;
+                    }
+                    drawPoint(track[i].x, track[i].y, color, onscreenCtx, startDistance + dotDistance / 1000, true);
+
+                    if (i > 0) {
+                        drawLine(track[i - 1], track[i], onscreenCtx, color);
+                    }
+                }
+            });
+        }
+
+        function getColorForTrack(index) {
+            const colors = ['red', 'blue', 'green', 'orange', 'purple', 'teal', 'brown', 'pink'];
+            return colors[index % colors.length];
+        }
+
+        function show1AData() {
+            const table = document.getElementById("data1ATable");
+            const rows = table.querySelectorAll("tr:not(:first-child)"); // Alle Zeilen außer der Kopfzeile
+            rows.forEach(row => row.style.display = "none"); // Alle Zeilen ausblenden
+
+            const teiltrasseWerte = getTeiltrasseWerte();
+            renderExportDataToTable(exportData, teiltrasseWerte);
+        }
+
+        function getTeiltrasseWerte() {
+            const selectElements = document.querySelectorAll("#data1ATable select");
+            return Array.from(selectElements).map(select => select.value);
+        }   
+
+    </script>
+
+    </div>
+
+    <!-- Seite: Excel Bearbeitung -->
+    <div id="page-excel" class="page">
+
+    <!-- Tabs -->
+    <div class="sheet-tabs">
+        <button onclick="showSheet('P-Daten')">P-Daten</button>
+        <button onclick="showSheet('S-Daten')">S-Daten</button>
+        <button onclick="show1AData()">1A-Daten</button>
+        <button onclick="showSheet('K-Daten')">K-Daten</button>
+    </div>
+
+    <!-- Inhalt P-Daten -->
+    <div id="sheet-P-Daten" class="sheet-content sheet-active">
+        <table id="dataPTable">
+        <tr><td>Programmversion:</td><td><input type="text" value="VERSION V1.5" /></td></tr>
+        <tr><td>Datum:</td><td><input type="date" /></td></tr>
+        <tr><td>Uhrzeit:</td><td><input type="time" /></td></tr>
+        <tr><td>Bauvorhaben:</td><td><input type="text" /></td></tr>
+        <tr><td>Bauvorhaben-Nummer:</td><td><input type="text" /></td></tr>
+        <tr><td>Plan-Name:</td><td><input type="text" /></td></tr>
+        <tr><td>Anzahl Stromsysteme:</td><td><input type="number" /></td></tr>
+        <tr><td>Anzahl Kabel:</td><td><input type="number" /></td></tr>
+        <tr><td>Streckennummer:</td><td><input type="text" /></td></tr>
+        <tr><td>Regionalbereich:</td>
+            <td>
+                <select>
+                    <option value="Ost">Ost</option>
+                    <option value="Mitte">Mitte</option>
+                    <option value="West">West</option>
+                    <option value="Nord">Nord</option>
+                    <option value="Süd">Süd</option>
+                </select>
+            </td>
+        </tr>
+        <tr><td>Berechnungsart:</td><td><input type="text" /></td></tr>
+        </table>
+    </div>
+
+    <!-- Inhalt S-Daten -->
+    <div id="sheet-S-Daten" class="sheet-content">
+        <table id="dataSTable">
+        <tr>
+            <th>Stromsystem Name:</th><th>Frequenz/Phasenl.:</th><th>Unterwerks km:</th><th>I-Kurven vorh.:</th><th>IF-Zeichnungsnr.:</th><th>IF-Datum:</th><th>IK-Zeichnungsnr.:</th><th>IK-Datum:</th><th>Diagramm-vz:</th><th>Diagramm-y0:</th><th>Diagramm-x0:</th>
+        </tr>
+        <tr class="dummy-row">
+            <td><input type="text" value="" /></td>
+            <td>
+                <select>
+                    <option value="16.7Hz synchron">16.7Hz synchron</option>
+                    <option value="16.7Hz asynchron">16.7Hz asynchron</option>
+                    <option value="50Hz">50Hz</option>
+                </select>
+            </td>
+            <td><input type="text" value="" /></td>
+            <td>
+                <select>
+                    <option value="Ja">Ja</option>
+                    <option value="Nein">Nein</option>
+                </select>
+            </td>
+            <td><input type="text" value="" /></td>
+            <td><input type="date" /></td>
+            <td><input type="text" value="" /></td>
+            <td><input type="date" /></td>
+            <td><input type="text" value="" /></td>
+            <td><input type="text" value="" /></td>
+            <td><input type="text" value="" /></td>
+        </tr>
+        </table>
+    </div>
+
+    <!-- Inhalt 1A-Daten -->
+    <div id="sheet-1A-Daten" class="sheet-content">
+        <table id="data1ATable">
+        <tr>
+            <th>Teiltrasse</th><th>Abschnitt</th><th>Start-km</th><th>Ende-km</th><th>Start-Abst.</th><th>Ende-Abst.</th>
+        </tr>
+        <tr class="dummy-row">
+            <td><input type="text" value="" /></td>
+            <td><input type="number" value="" /></td>
+            <td><input type="text" value="" /></td>
+            <td><input type="text" value="" /></td>
+            <td><input type="text" value="" /></td>
+            <td><input type="text" value="" /></td>
+        </tr>
+        </table>
+    </div>
+
+    <!-- Inhalt K-Daten -->
+    <div id="sheet-K-Daten" class="sheet-content">
+        <table id="dataKTable">
+        <tr>
+            <th>Teiltrasse:</th><th>Boden-Leitf.:</th><th>Anz.Gleise:</th><th>Oberleitung:</th><th>Rückleiter</th>
+        </tr>
+        <tr id="kTableTemplateRow">
+            <td><input type="text" value="1a" /></td>
+            <td><input type="number" value="" /></td>
+            <td><input type="number" value="" /></td>
+            <td><input type="number" value="" /></td>
+            <td>
+                <select>
+                    <option value="0">Nein</option>
+                    <option value="1">Ja</option>
+                </select>
+            </td>
+        </tr>
+        </table>
+        <button onclick="addRowToKTable()">Zeile hinzufügen</button>
+    </div>
+
+    <br>
+    <button onclick="exportTablesToExcel()">Exportieren</button>
+    </div>
+<script>
+
+    function switchPage(page) {
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        document.getElementById('page-' + page).classList.add('active');
+
+        // Nur im Skalierungsmodus alles ausblenden!
+        if (page === 'berechnung') {
+            showOnlyCanvasOnBerechnung(scalingMode);
+            if (!scalingMode && !recordingMode && !measuringMode) {
+                drawVisibleRegion();
+            }
+        } else {
+            // Immer alles wieder anzeigen, wenn du auf eine andere Seite wechselst!
+            showOnlyCanvasOnBerechnung(false);
+        }
+
+        if (page === 'main') {
+            updateTrackAndCableDropdowns();
+        }
+    }
+
+    function showSheet(sheetId) {
+      document.querySelectorAll('.sheet-content').forEach(s => s.classList.remove('sheet-active'));
+      document.getElementById('sheet-' + sheetId).classList.add('sheet-active');
+    }
+
+    function show1AData() {
+        showSheet('1A-Daten');
+
+        const teiltrasseWerte = getTeiltrasseWerte();
+
+        // Wenn exportData schon gefüllt ist, Tabelle neu rendern
+        if (exportData.length > 0) {
+            renderExportDataToTable(exportData, teiltrasseWerte);
+        }
+    }
+
+    function getTeiltrasseWerte() {
+        const table = document.getElementById('dataKTable');
+        const rows = Array.from(table.querySelectorAll('tr'));
+        
+        const teiltrasseWerte = rows
+            .slice(1) // erste Zeile (Header) überspringen
+            .map(row => {
+                const input = row.querySelector('td input[type="text"]');
+                return input ? input.value.trim() : null;
+            })
+            .filter(value => value); // leere oder ungültige Werte entfernen 
+            console.log("Zeilen gefunden:", rows.length);
+            console.log("Teiltrassen-Werte:", teiltrasseWerte);
+        return teiltrasseWerte;
+    }
+
+</script>
+
+<div id="page-main" class="page">
+    <div style="padding: 2vw">
+        <div style="margin:1vw 0;">
+            <label>Strecke wählen:
+                <select id="trackSelect"></select>
+            </label>
+            <label>Kabel wählen:
+                <select id="cableSelect"></select>
+            </label>
+            <button id="calcBtn">Abstände berechnen</button>
+        </div>
+        <div style="margin:1vw 0;">
+            <label>Streckenname:
+                <input type="text" id="trackNameInput" value="Strecke 1" style="width:12vw;">
+            </label>
+            <label style="margin-left:2vw;">Kabelname:
+                <input type="text" id="cableNameInput" value="Kabel 1" style="width:12vw;">
+            </label>
+        </div>
+        <br>
+        <button id="scaleStartBtn" onclick="startScalingMode()" style="display: inline-block">Skalierung starten</button>
+        <button id="trackInitBtn" onclick="startInitialTrack()" style="display: none;">Strecke einlesen</button>
+        <button id="trackNewBtn" onclick="startNewTrack()" style="display: none;">Neu</button>
+        <div id="cableControls" style="margin-top:1vw;">
+            <button id="cableInitBtn" onclick="startInitialCable()" style="display: inline-block;">Kabel einlesen</button>
+            <button id="cableNewBtn" onclick="startNewCable()" style="display: none;">Neues Kabel</button>
+        </div>
+        <div id="formatSelector" style="margin: 1vw;">
+            <div class="format-radio-group">
+                <label>
+                    <input type="radio" name="pdfFormat" value="portrait" checked>
+                    <span>Hochformat</span>
+                </label>
+                <label>
+                    <input type="radio" name="pdfFormat" value="landscape">
+                    <span>Querformat</span>
+                </label>
+            </div>
+        </div>
+    </div>
+    <div id="scalingControls">
+        <label for="scaleLength">Skalierungslänge (in Metern):</label>
+            <select id="scaleSelect">
+                <option value="10">10 Meter</option>
+                <option value="50">50 Meter</option>
+                <option value="100" selected>100 Meter</option>
+                <option value="200">200 Meter</option>
+                <option value="custom">Eigene Länge eingeben</option>
+            </select>
+
+            <input type="number" id="customScaleInput" placeholder="Eigene Länge" style="display: none;" />
+        
+    </div>
+    <div id="scaleResult" style="display: none; margin-top: 10px;">
+        Maßstab: <span id="scaleValue"></span> Meter pro Pixel
+    </div>
+</div>
+<div id="modalOverlay" style="display:none;">
+    <div id="modalContent">
+        <!-- Hier kommt dynamisch der Inhalt rein -->
+    </div>
+</div>
+<script>
+    let scalingPoints = [];
+    let scalingMode = false;
+
+    function startInitialTrack() {
+        switchPage('berechnung'); // zum Canvas springen
+        recordingMode = true;
+        toggleSwitch('switch1');
+        info.innerHTML = 'Erste Strecke gestartet. Aufnahmemodus aktiv.';
+        updateTrackButtons(); // Buttons umschalten
+    }
+
+    function startNewTrack() {
+        newTrack(); // initialisiert neue Strecke
+        switchPage('berechnung'); // Canvas zeigen
+        recordingMode = true;
+        toggleSwitch('switch1');
+        info.innerHTML = 'Neue Strecke gestartet. Aufnahmemodus aktiv.';
+    }
+
+    function newCableTrack() {
+        cableTracks.push([]);
+        cableNames.push(`Kabel ${cableTracks.length}`);
+        activeCableIndex = cableTracks.length - 1;
+        updateCableButtons();
+    }
+
+    function startInitialCable() {
+        if (cableTracks.length === 0) newCableTrack();
+        measuringMode = true;
+        toggleSwitch('switch2');
+        info.innerHTML = 'Erstes Kabel gestartet. Messmodus aktiv.';
+        updateCableButtons();
+    }
+
+    function startNewCable() {
+        newCableTrack();
+        measuringMode = true;
+        toggleSwitch('switch2');
+        info.innerHTML = 'Neues Kabel gestartet. Messmodus aktiv.';
+        updateCableButtons();
+    }
+
+    function updateCableButtons() {
+        const cableInitBtn = document.getElementById('cableInitBtn');
+        const cableNewBtn = document.getElementById('cableNewBtn');
+        if (cableTracks.length >= 1) {
+            cableInitBtn.style.display = 'none';
+            cableNewBtn.style.display = 'inline-block';
+        } else {
+            cableInitBtn.style.display = 'inline-block';
+            cableNewBtn.style.display = 'none';
+        }
+    }
+
+    function updateTrackButtons() {
+        const trackInitBtn = document.getElementById('trackInitBtn');
+        const trackNewBtn = document.getElementById('trackNewBtn');
+
+        if (allTracks.length >= 1) {
+            trackInitBtn.style.display = 'none';
+            trackNewBtn.style.display = 'inline-block';
+        } else {
+            trackInitBtn.style.display = 'inline-block';
+            trackNewBtn.style.display = 'none';
+        }
+    }
+
+    document.getElementById('scaleSelect').addEventListener('change', function () {
+        const customInput = document.getElementById('customScaleInput');
+        if (this.value === 'custom') {
+            customInput.style.display = 'inline';
+        } else {
+            customInput.style.display = 'none';
+        }
+    });
+
+    document.querySelectorAll('input[name="pdfFormat"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            pdfFormat = this.value;
+            // Optional: PDF neu rendern, falls schon geladen
+            if (pdfDocument) renderCurrentPage();
+        });
+    });
+
+    function updateTrackAndCableDropdowns() {
+        const trackSelect = document.getElementById('trackSelect');
+        const cableSelect = document.getElementById('cableSelect');
+        trackSelect.innerHTML = '';
+        cableSelect.innerHTML = '';
+        allTracks.forEach((_, i) => {
+            const opt = document.createElement('option');
+            opt.value = i;
+            opt.text = trackNames[i] || `Strecke ${i + 1}`;
+            trackSelect.appendChild(opt);
+        });
+        cableTracks.forEach((_, i) => {
+            const opt = document.createElement('option');
+            opt.value = i;
+            opt.text = cableNames[i] || `Kabel ${i + 1}`;
+            cableSelect.appendChild(opt);
+        });
+    }
+
+    function syncNameInputs() {
+        const trackIdx = document.getElementById('trackSelect').selectedIndex;
+        const cableIdx = document.getElementById('cableSelect').selectedIndex;
+        document.getElementById('trackNameInput').value = trackNames[trackIdx] || `Strecke ${trackIdx + 1}`;
+        document.getElementById('cableNameInput').value = cableNames[cableIdx] || `Kabel ${cableIdx + 1}`;
+    }
+
+    // Beim Wechsel der Auswahl:
+    document.getElementById('trackSelect').addEventListener('change', syncNameInputs);
+    document.getElementById('cableSelect').addEventListener('change', syncNameInputs);
+
+    // Beim Ändern des Namens:
+    document.getElementById('trackNameInput').addEventListener('input', function() {
+        const idx = document.getElementById('trackSelect').selectedIndex;
+        trackNames[idx] = this.value;
+        updateTrackAndCableDropdowns();
+        document.getElementById('trackSelect').selectedIndex = idx;
+    });
+    document.getElementById('cableNameInput').addEventListener('input', function() {
+        const idx = document.getElementById('cableSelect').selectedIndex;
+        cableNames[idx] = this.value;
+        updateTrackAndCableDropdowns();
+        document.getElementById('cableSelect').selectedIndex = idx;
+    });
+
+    document.getElementById('calcBtn').addEventListener('click', () => {
+        const trackIdx = parseInt(document.getElementById('trackSelect').value, 10);
+        const cableIdx = parseInt(document.getElementById('cableSelect').value, 10);
+        calculateDistances(cableTracks[cableIdx], trackIdx);
+    });
+
+    function showModal(contentHtml) {
+        const overlay = document.getElementById('modalOverlay');
+        const content = document.getElementById('modalContent');
+        content.innerHTML = contentHtml;
+        overlay.style.display = 'flex';
+    }
+
+    function closeModal() {
+        document.getElementById('modalOverlay').style.display = 'none';
+    }
+
+    function startScalingMode() {
+        scalingMode = true;
+        scalingPoints = [];
+        switchPage('berechnung');
+        setTimeout(() => {
+            onscreenCanvas.requestPointerLock();
+            info.innerHTML = "Skalierungsmodus: Klicke zwei Punkte auf das Canvas. ESC zum Abbrechen.";
+            showOnlyCanvasOnBerechnung(true);
+        }, 100);
+    }
+
+    function endScalingMode() {
+        scalingMode = false;
+        document.exitPointerLock();
+        showOnlyCanvasOnBerechnung(false);
+        switchPage('main');
+    }
+
+    function showModalForMode(mode) {
+        // Zeige das Modal an (z.B. mit Blur)
+        document.getElementById('modalOverlay').style.display = 'flex';
+        // Aktiviere Pointerlock und Events nur für diesen Modus
+        onscreenCanvas.requestPointerLock();
+        currentMode = mode; // z.B. 'scaling', 'trackInput', 'cableInput'
+        // Passe renderingArray ggf. an
+    }
+
+    function closeModalMode() {
+        document.getElementById('modalOverlay').style.display = 'none';
+        if (document.pointerLockElement === onscreenCanvas) {
+            document.exitPointerLock();
+        }
+        currentMode = null;
+        // Canvas bleibt als Anzeige sichtbar
+    }
+
+    document.getElementById('trackSelect').addEventListener('change', updateRenderingArray);
+    document.getElementById('cableSelect').addEventListener('change', updateRenderingArray);
+
+    function updateRenderingArray() {
+        const trackIdx = parseInt(document.getElementById('trackSelect').value, 10);
+        const cableIdx = parseInt(document.getElementById('cableSelect').value, 10);
+        renderingArray = [
+            {type: 'track', index: trackIdx},
+            {type: 'cable', index: cableIdx}
+        ];
+        drawVisibleRegion();
+    }
+
+    function showOnlyCanvasOnBerechnung(showOnlyCanvas = true) {
+        const sidebar = document.getElementById('sidebar');
+        const sidebarToggle = document.getElementById('sidebar-toggle');
+        const pdfControls = document.getElementById('pdf-controls');
+        const info = document.getElementById('info');
+
+        if (showOnlyCanvas) {
+        if (sidebar) sidebar.style.visibility = 'hidden';
+        if (sidebarToggle) sidebarToggle.style.visibility = 'hidden';
+        if (pdfControls) pdfControls.style.visibility = 'hidden';
+        if (info) info.style.visibility = 'hidden';
+        } else {
+            if (sidebar) sidebar.style.visibility = 'visible';
+            if (sidebarToggle) sidebarToggle.style.visibility = 'visible';
+            if (pdfControls) pdfControls.style.visibility = 'visible';
+            if (info) info.style.visibility = 'visible';
+        }
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        switchPage('main');
+    });
+</script>
+</body>
+</html>

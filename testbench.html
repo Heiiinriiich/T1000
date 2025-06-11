@@ -615,7 +615,16 @@
                 startDistance = getDistanceValue();
 
                 track.push({x, y});
-                drawPoint(x, y, color, offscreenCtx, startDistance + currentIndex * 0.1, true);
+                let distanceSinceLast = 0;
+
+                if (track.length > 1) {
+                    const last = track[track.length - 2];
+                    distanceSinceLast = getDistance(last.x, last.y, x, y) * distanceScale;
+                }
+
+                dotDistance += distanceSinceLast;
+
+                drawPoint(x, y, color, offscreenCtx, startDistance + dotDistance / 1000, true); // Umrechnung in km
                 currentIndex++;
                 info.innerHTML = `Punkt gespeichert für Strecke ${activeTrackIndex + 1}: (${x}, ${y})`;
 
@@ -628,11 +637,11 @@
 
 
                     // Kalibrierung basierend auf den ersten zwei Punkten
-                    if (track.length === 2) {
+                    /*if (track.length === 2) {
                             const pixelDistance = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
                             distanceScale = 100 / pixelDistance; // Annahme: Die Entfernung zwischen den Punkten ist 100 Meter
                             info.innerHTML += `<br>Kalibrierung abgeschlossen: 1 Pixel = ${distanceScale.toFixed(4)} Meter`;
-                    }
+                    }*/
                 }
 
             } else if (measuringMode) {
@@ -649,11 +658,29 @@
                     const dx = scalingPoints[1].x - scalingPoints[0].x;
                     const dy = scalingPoints[1].y - scalingPoints[0].y;
                     const pixelDist = Math.sqrt(dx * dx + dy * dy);
-                    distanceScale = 100 / pixelDist; // Beispiel: 100m zwischen zwei Punkten
-                    scalingMode = false;
+                    let selectedValue = document.getElementById('scaleSelect').value;
+                    let realWorldDistance;
 
-                    info.innerHTML += `<br>Skalierung abgeschlossen. 1 Pixel = ${distanceScale.toFixed(4)} m`;
-                    scalingMode = false; // Skalierung beenden
+                    if (selectedValue === 'custom') {
+                        realWorldDistance = parseFloat(document.getElementById('customScaleInput').value);
+                    } else {
+                        realWorldDistance = parseFloat(selectedValue);
+                    }
+
+                    if (!isNaN(realWorldDistance) && realWorldDistance > 0) {
+                        distanceScale = realWorldDistance / pixelDist;
+                        scalingMode = false; // Skalierung beenden
+                        info.innerHTML += `<br>Skalierung abgeschlossen. 1 Pixel = ${distanceScale.toFixed(4)} m`;
+                        document.getElementById('scalingControls').style.display = 'none';
+
+                        // Ergebnisfeld anzeigen
+                        document.getElementById('scaleValue').textContent = distanceScale.toFixed(4);
+                        document.getElementById('scaleResult').style.display = 'block';
+
+                    } else {
+                        info.innerHTML += `<br>Fehler: Ungültige Skalierungslänge.`;
+                        scalingMode = false; // Skalierung beenden
+                    }
                 }
                 return;
             }
@@ -680,7 +707,7 @@
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'bottom';
                 console.log(dotDistance);
-                ctx.fillText(`${dotDistance.toFixed(1)} km`, x, y - 10);
+                ctx.fillText(`${dotDistance.toFixed(3)} km`, x, y - 10);
             }
         }
 
@@ -1337,6 +1364,8 @@
             equationsPerTrack.push({});
             activeTrackIndex = allTracks.length - 1;
             console.log(`Neue Strecke gestartet (Index: ${activeTrackIndex})`);
+            dotDistance = 0;
+            currentIndex = 0;
         }
 
         function getColorForTrack(index) {
@@ -1382,13 +1411,18 @@
 
         function renderAllTracks() {
             render(true); // Hintergrund und PDF zeichnen
+            let dotDistance = 0;
 
             allTracks.forEach((track, trackIndex) => {
                 const color = getColorForTrack(trackIndex);
 
                 for (let i = 0; i < track.length; i++) {
                     const point = track[i];
-                    drawPoint(point.x, point.y, color, offscreenCtx, startDistance + i * 0.1, true);
+                    if (i > 0) {
+                        dotDistance += getDistance(track[i - 1].x, track[i - 1].y, track[i].x, track[i].y) * distanceScale;
+                    }
+                    drawPoint(track[i].x, track[i].y, color, offscreenCtx, startDistance + dotDistance / 1000, true);
+
                     if (i > 0) {
                         drawLine(track[i - 1], track[i], offscreenCtx, color);
                     }
@@ -1596,10 +1630,26 @@
         <h2>Gespeicherte Gleichungen pro Strecke</h2>
         <div id="equationTableContainer"></div>
         <br>
-        <button onclick="startScalingMode()">Skalierung</button>
-        <button id="trackInitBtn" onclick="startInitialTrack()">Strecke einlesen</button>
+        <button id="scaleStartBtn" onclick="startScalingMode()" style="display: inline-block">Skalierung starten</button>
+        <button id="trackInitBtn" onclick="startInitialTrack()" style="display: none;">Strecke einlesen</button>
         <button id="trackNewBtn" onclick="startNewTrack()" style="display: none;">Neu</button>
-      </div>
+    </div>
+    <div id="scalingControls">
+        <label for="scaleLength">Skalierungslänge (in Metern):</label>
+            <select id="scaleSelect">
+                <option value="10">10 Meter</option>
+                <option value="50">50 Meter</option>
+                <option value="100" selected>100 Meter</option>
+                <option value="200">200 Meter</option>
+                <option value="custom">Eigene Länge eingeben</option>
+            </select>
+
+            <input type="number" id="customScaleInput" placeholder="Eigene Länge" style="display: none;" />
+        
+    </div>
+    <div id="scaleResult" style="display: none; margin-top: 10px;">
+        Maßstab: <span id="scaleValue"></span> Meter pro Pixel
+    </div>
 </div>
 <script>
     let scalingPoints = [];
@@ -1712,6 +1762,9 @@
     function startScalingMode() {
         scalingMode = true;
         scalingPoints = [];
+        trackInitBtn.style.display = 'inline-block';
+        scaleStartBtn.style.display = 'none';
+
         switchPage('berechnung');
         info.innerHTML = "Klicke 2 Punkte für die Skalierung auf dem Canvas.";
 
@@ -1747,6 +1800,15 @@
             trackNewBtn.style.display = 'none';
         }
     }
+
+    document.getElementById('scaleSelect').addEventListener('change', function () {
+        const customInput = document.getElementById('customScaleInput');
+        if (this.value === 'custom') {
+            customInput.style.display = 'inline';
+        } else {
+            customInput.style.display = 'none';
+        }
+    });
 </script>
 </body>
 </html>
