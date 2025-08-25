@@ -965,9 +965,6 @@
                     </div>
                 </div>
                 <div class="button-container">
-                    <span id="file-name-sidebar">Keine Datei hochgeladen</span>
-                </div>
-                <div class="button-container">
                     <div id="scaleResult" style="margin-top: 1vw;">
                         Maßstab: <span id="scaleValue"></span> Meter pro Pixel
                     </div>
@@ -1048,6 +1045,8 @@
                 </div>
             </div>
         </div>
+        <div id="pdfUploadModal" style="display:none;">
+        </div>
     </div>
 </div>
 </div>
@@ -1072,9 +1071,11 @@
     let pdfDocument = null;
     let allPageCanvases = [];
     let allPdfDocuments = []; // Array für {pdfDocument, rotation}
+    let uploadedPdfNames = [];
     let previewImageDataUrl = null;
     let pdfFormat = 'portrait';
     let userRotation = 0; // 0, 90, 180, 270
+    let orientationConfirmed = false;
     let previewRotation = 0;
     let previewIsPortrait = true;
     let currentPageNum = 1;
@@ -1126,6 +1127,7 @@
     let equationsPerCable = [{}]; // Gleichungen für jedes Kabel
     let trackNames = ["Strecke 1"];
     let cableNames = ["Kabel 1"];
+    let fileNames = []; // Array für Dateinamen
     let renderingArray = []; // z.B. [{type: 'track', index: 0}, {type: 'cable', index: 1}]
     let pdfLoaded = false;
     let scalingDone = false;
@@ -1152,6 +1154,10 @@
     }
 
     const isFirefox = typeof navigator !== "undefined" && /firefox/i.test(navigator.userAgent);
+
+    function updateFileNameDisplay() {
+        fileNameDisplay.innerHTML = uploadedPdfNames.map(name => `<div>${name}</div>`).join('');
+    }
 
     document.getElementById('resetBtn').addEventListener('click', () => {
         switchPage('main');
@@ -1193,7 +1199,7 @@
         let jobs = [];
         // Nur wenn pdfDocument übergeben wurde, rendern wir diese NEUE PDF!
         if (pdfDocument) {
-            allPdfDocuments.push({ pdfDocument, rotation });
+            allPdfDocuments.push({ pdfDocument, rotation, fileName: pdfDocument.name });
             let renderedPages = 0;
             showPdfProgressBar("PDF wird gerendert");
             for (let i = 1; i <= pdfDocument.numPages; i++) {
@@ -1315,10 +1321,18 @@
                 if (fileNameDisplay) {
                     if (fileNameDisplay.innerHTML && fileNameDisplay.innerHTML !== 'Keine Datei hochgeladen') {
                         fileNameDisplay.innerHTML += `<br>${file.name}`;
+                        if (!uploadedPdfNames.includes(file.name)) {
+                            uploadedPdfNames.push(file.name);
+                            updateFileNameDisplay();
+                        }
                         info.innerHTML = 'Weitere PDF wird geladen';
                         showPdfProgressBar("Weitere PDF wird geladen");
                     } else {
                         fileNameDisplay.innerHTML = file.name;
+                        if (!uploadedPdfNames.includes(file.name)) {
+                            uploadedPdfNames.push(file.name);
+                            updateFileNameDisplay();
+                        }
                         info.innerHTML = 'PDF wird geladen';
                         showPdfProgressBar("PDF wird geladen");
                     }
@@ -2226,16 +2240,44 @@
             }
         };
 
-        const aDatenMapping = {
-            1: { 
-                0: 'A8',
-                1: 'B8',
-                2: 'C8',
-                3: 'D8',
-                4: 'E8',
-                5: 'F8'
+        function createADatenMapping(rowCount) {
+            const mapping = {};
+            // Die erste Datenzeile beginnt in Excel bei Zeile 8 (A8, B8, ...)
+            const startRow = 8;
+            for (let i = 0; i < rowCount; i++) {
+                const excelRow = startRow + i;
+                mapping[i + 1] = { // +1 weil 0 die Headerzeile ist
+                    0: `A${excelRow}`,
+                    1: `B${excelRow}`,
+                    2: `C${excelRow}`,
+                    3: `D${excelRow}`,
+                    4: `E${excelRow}`,
+                    5: `F${excelRow}`,
+                    6: `H${excelRow}`, // K-Daten 1
+                    7: `I${excelRow}`, // K-Daten 2
+                    8: `J${excelRow}`  // K-Daten 3
+
+                };
             }
-        };
+            return mapping;
+        }
+
+        function createKDatenMapping(rowCount) {
+            const mapping = {};
+            // Die erste Datenzeile beginnt in Excel bei Zeile 8 (A8, B8, ...)
+            const startRow = 8;
+            for (let i = 0; i < rowCount; i++) {
+                const excelRow = startRow + i;
+                mapping[i + 1] = { // +1 weil 0 die Headerzeile ist
+                    0: `A${excelRow}`,
+                    1: `B${excelRow}`,
+                    2: `C${excelRow}`,
+                    3: `D${excelRow}`,
+                    4: `E${excelRow}`
+                };
+            }
+            return mapping;
+        }
 
         function exportTablesToExcel() {
             // Neues Arbeitsbuch erstellen
@@ -2252,13 +2294,19 @@
             XLSX.utils.book_append_sheet(wb, sDatenSheet, "S-Daten");
 
             // 1A-Daten Sheet
-            const aDatenSheet = createSheetFromTableWithPositions('data1ATable', aDatenMapping);
+            const aDatenExportData = getExport1ADataWithK();
+            const aDatenMapping = createADatenMapping(aDatenExportData.length);
+            const aDatenSheet = createSheetFromArrayWithPositions(aDatenExportData, aDatenMapping);
             applyStylingToSheet(aDatenSheet, '1A-Daten');
             XLSX.utils.book_append_sheet(wb, aDatenSheet, "1A-Daten");
 
-            // Zusätzliche Sheets mit Headern
-            const additionalSheet1 = createEmptySheetWithHeaders("Zusätzliche Daten 1", ["Header 1", "Header 2", "Header 3"]);
-            XLSX.utils.book_append_sheet(wb, additionalSheet1, "Zusatz 1");
+            // K-Daten Sheet
+            const kDatenTable = document.getElementById('dataKTable');
+            const kDatenRowCount = kDatenTable.rows.length - 1; // -1 für Header
+            const kDatenMapping = createKDatenMapping(kDatenRowCount);
+            const kDatenSheet = createSheetFromTableWithPositions("dataKTable", kDatenMapping);
+            applyStylingToSheet(kDatenSheet, 'K-Daten');
+            XLSX.utils.book_append_sheet(wb, kDatenSheet, "K-Daten");
 
             const additionalSheet2 = createEmptySheetWithHeaders("Zusätzliche Daten 2", ["Spalte A", "Spalte B", "Spalte C", "Spalte D"]);
             XLSX.utils.book_append_sheet(wb, additionalSheet2, "Zusatz 2");
@@ -2300,6 +2348,20 @@
             });
 
             // Bereich des Arbeitsblatts definieren
+            sheet['!ref'] = calculateSheetRange(sheet);
+            return sheet;
+        }
+
+        function createSheetFromArrayWithPositions(dataArray, cellMapping) {
+            const sheet = {};
+            dataArray.forEach((row, rowIndex) => {
+                row.forEach((value, colIndex) => {
+                    if (cellMapping[rowIndex + 1] && cellMapping[rowIndex + 1][colIndex]) {
+                        const cellPosition = cellMapping[rowIndex + 1][colIndex];
+                        sheet[cellPosition] = { v: value };
+                    }
+                });
+            });
             sheet['!ref'] = calculateSheetRange(sheet);
             return sheet;
         }
@@ -2462,6 +2524,44 @@
             table.appendChild(clone);
         }
 
+        function getKDataMapping() {
+            const table = document.getElementById('dataKTable');
+            const rows = Array.from(table.querySelectorAll('tr')).slice(1); // skip header
+            const mapping = {};
+            rows.forEach(row => {
+                const cells = row.querySelectorAll('td');
+                const teiltrasse = cells[0].querySelector('input')?.value.trim();
+                if (teiltrasse) {
+                    mapping[teiltrasse] = [
+                        cells[1].querySelector('input')?.value ?? "",
+                        cells[2].querySelector('input')?.value ?? "",
+                        cells[3].querySelector('input')?.value ?? ""
+                    ];
+                }
+            });
+            return mapping;
+        }
+
+        function getExport1ADataWithK() {
+            const table = document.getElementById('data1ATable');
+            const rows = Array.from(table.querySelectorAll('tr')).slice(1); // skip header
+            const kMapping = getKDataMapping();
+            const result = [];
+
+            rows.forEach(row => {
+                const cells = row.querySelectorAll('td');
+                const teiltrasse = cells[0].querySelector('input, select')?.value.trim();
+                const rowData = Array.from(cells).map(cell => cell.querySelector('input, select')?.value ?? "");
+                // K-Daten anhängen (H, I, J)
+                if (teiltrasse && kMapping[teiltrasse]) {
+                    result.push([...rowData, ...kMapping[teiltrasse]]);
+                } else {
+                    result.push([...rowData, "", "", ""]);
+                }
+            });
+            return result;
+        }
+
         function newTrack() {
             allTracks.push([]); // Leeres Array für neue Strecke
             trackNames.push(`Strecke ${allTracks.length}`);
@@ -2594,6 +2694,9 @@
         // Wenn exportData schon gefüllt ist, Tabelle neu rendern
         if (exportData.length > 0) {
             renderExportDataToTable(exportData, teiltrasseWerte);
+            console.log("1A-Daten gerendert:", exportData);
+            console.log("Teiltrasse-Werte:", teiltrasseWerte);
+
         }
     }
 
@@ -2757,6 +2860,7 @@
     async function confirmOrientation() {
         userRotation = previewRotation;
         pdfFormat = previewIsPortrait ? 'portrait' : 'landscape';
+        orientationConfirmed = true;
         document.getElementById('orientationModal').style.display = 'none';
         document.getElementById('modalOverlay').style.display = 'none';
         await addPdfFileAndMerge(pdfDocument, userRotation);
@@ -2778,6 +2882,7 @@
         previewRotation = 0;
         previewIsPortrait = true; // Standard auf Hochformat
         userRotation = 0; // Reset der Benutzerrotation
+        orientationConfirmed = false;
         updateMainPageUI();
     }
 
@@ -2821,6 +2926,113 @@
             document.getElementById('pdfPreviewImg').src = canvas.toDataURL();
         };
         img.src = previewImageDataUrl;
+    }
+
+    function showPdfUploadModal(expectedFiles, uploadedFiles) {
+        const missingFiles = expectedFiles.filter(f => !uploadedFiles.includes(f));
+        const uploadedList = uploadedFiles.map(f => `<li>${f} <button onclick="removeUploadedPdf('${f}')">Entfernen</button></li>`).join('');
+        const missingList = missingFiles.map(f => `<li style="color:red">${f}</li>`).join('');
+        document.getElementById('modalOverlay').style.display = 'flex';
+        document.getElementById('orientationModal').style.display = 'none';
+        const pdfUploadModal = document.getElementById('pdfUploadModal');
+        pdfUploadModal.style.display = 'block';
+        pdfUploadModal.innerHTML = `
+            <h2>Bitte laden Sie alle PDFs der letzten Session erneut hoch</h2>
+            <div>
+                <strong>Bereits hochgeladen:</strong>
+                <ul>${uploadedList || '<li>Keine</li>'}</ul>
+                <strong>Noch fehlend:</strong>
+                <ul>${missingList || '<li>Alle PDFs vorhanden</li>'}</ul>
+            </div>
+            <input type="file" id="pdfUploadInput" accept="application/pdf" style="display:none;">
+            <div style="display:flex; gap:1vw; justify-content:center; margin-top:2vw;">
+                <button id="uploadPdfBtn" class="file-input-label" tabindex="0">
+                    <span class="material-icons" style="font-size: 1.3dvw;">upload</span> PDF hochladen
+                </button>
+                <button class="warnButton" id="clearSessionBtn2">Session löschen</button>
+            </div>
+        `;
+
+        // PDF hochladen Button
+        document.getElementById('uploadPdfBtn').onclick = function() {
+            document.getElementById('pdfUploadInput').click();
+        };
+        // File-Input Event
+        document.getElementById('pdfUploadInput').onchange = async function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            // Hole erwartete Reihenfolge aus Session
+            const sessionData = JSON.parse(localStorage.getItem('t1000_session'));
+            const expectedFiles = sessionData.fileNames || [];
+            const uploadedFiles = getCurrentlyUploadedPdfNames();
+
+            // Prüfe Reihenfolge und Namen
+            const nextExpected = expectedFiles[uploadedFiles.length];
+            if (file.name !== nextExpected) {
+                alert(`Falsche Datei oder Reihenfolge! Erwartet: "${nextExpected}", erhalten: "${file.name}"`);
+                e.target.value = ""; // Reset input
+                return;
+            }
+
+            // Lade PDF und übernehme Orientation aus Session
+            const fileReader = new FileReader();
+            fileReader.onload = async function () {
+                const pdfData = new Uint8Array(this.result);
+                const pdfDoc = await pdfjsLib.getDocument({ data: pdfData }).promise;
+                // Orientation aus Session übernehmen
+                const rotation = window.sessionUserOrientations && window.sessionUserOrientations[file.name]
+                ? window.sessionUserOrientations[file.name]
+                : 0;
+                await addPdfFileAndMerge(pdfDoc, rotation);
+                // Dateiname merken
+                if (!uploadedPdfNames) uploadedPdfNames = [];
+                uploadedPdfNames.push(file.name);
+
+                // UI aktualisieren
+                showPdfUploadModal(expectedFiles, getCurrentlyUploadedPdfNames());
+            };
+            fileReader.readAsArrayBuffer(file);
+        };
+        // Session löschen Button
+        document.getElementById('clearSessionBtn2').onclick = function() {
+            localStorage.removeItem('t1000_session');
+            location.reload();
+        };
+
+        if (missingFiles.length === 0) {
+            document.getElementById('modalOverlay').style.display = 'none';
+            pdfUploadModal.style.display = 'none';
+        }
+    }
+
+    function getCurrentlyUploadedPdfNames() {
+        // Wenn du die Dateinamen beim Upload speicherst, z.B. in einer globalen Variable:
+        // Angenommen, du hast ein Array uploadedPdfNames, das du beim Upload pflegst:
+        if (uploadedPdfNames) {
+            return [...uploadedPdfNames];
+        }
+        // Alternativ, falls du die Namen aus fileNameDisplay extrahieren willst:
+        const names = [];
+        document.querySelectorAll('#file-name div').forEach(div => {
+            if (div.textContent && div.textContent !== 'Keine Datei hochgeladen') {
+                names.push(div.textContent.trim());
+            }
+        });
+        return names;
+    }
+
+    function removeUploadedPdf(name) {
+        // Entferne aus uploadedPdfNames
+        if (uploadedPdfNames) {
+            uploadedPdfNames = uploadedPdfNames.filter(n => n !== name);
+        }
+        // Optional: Entferne auch aus allPdfDocuments, falls du dort Dateinamen speicherst
+        allPdfDocuments = allPdfDocuments.filter(doc => doc.fileName !== name);
+
+        // Aktualisiere die Anzeige
+        const sessionData = JSON.parse(localStorage.getItem('t1000_session'));
+        showPdfUploadModal(sessionData.fileNames, getCurrentlyUploadedPdfNames());
     }
 
     function startScalingMode() {
@@ -2901,7 +3113,6 @@
         document.getElementById('cableNewBtn').style.display = 'none';
         document.getElementById('calcBtn').style.display = 'none';
         document.getElementById('file-name').style.display = 'none';
-        document.getElementById('file-name-sidebar').style.display = 'none';
         document.getElementById('trackDropdownContainer').style.display = 'none';
         document.getElementById('cableDropdownContainer').style.display = 'none';
         document.getElementById('scaleStartBtn').style.display = 'none';
@@ -2920,7 +3131,6 @@
         if (!pdfLoaded) {
             document.getElementById('fileInputLabel').style.display = 'inline-block';
             document.getElementById('file-name').style.display = 'inline-block';
-            document.getElementById('file-name-sidebar').style.display = 'inline-block';
             document.getElementById('info').style.display = 'inline-block';
         }
         // PDF geladen, Skalierung noch nicht durchgeführt
@@ -2929,7 +3139,6 @@
             document.getElementById('fileAddLabel').style.display = 'inline-block';
             document.getElementById('fileAddLabelContainer').style.display = 'inline-block';
             document.getElementById('file-name').style.display = 'flex';
-            document.getElementById('file-name-sidebar').style.display = 'inline-block';
             document.getElementById('scaleStartBtn').style.display = 'inline-block';
             document.getElementById('scalingControls').style.display = 'block';
             document.getElementById('scaleInformation').style.display = 'inline-block';
@@ -2944,7 +3153,6 @@
             document.getElementById('fileAddLabel').style.display = 'inline-block';
             document.getElementById('fileAddLabelContainer').style.display = 'inline-block';
             document.getElementById('file-name').style.display = 'flex';
-            document.getElementById('file-name-sidebar').style.display = 'inline-block';
             document.getElementById('info').style.display = 'inline-block';
         }
         // Skalierung und Strecke fertig, Kabel noch nicht eingelesen
@@ -2958,7 +3166,6 @@
             document.getElementById('fileAddLabel').style.display = 'inline-block';
             document.getElementById('fileAddLabelContainer').style.display = 'inline-block';
             document.getElementById('file-name').style.display = 'flex';
-            document.getElementById('file-name-sidebar').style.display = 'inline-block';
             document.getElementById('info').style.display = 'inline-block';
         }
         // Alles fertig: beide Dropdowns zeigen
@@ -2976,13 +3183,19 @@
             document.getElementById('cableName').style.display = 'inline-block';
             document.getElementById('cableNameInput').style.display = 'inline-block';
             document.getElementById('file-name').style.display = 'flex';
-            document.getElementById('file-name-sidebar').style.display = 'inline-block';
             document.getElementById('info').style.display = 'inline-block';        
         }
     }
 
     function saveSessionToLocal() {
-
+        const userOrientations = {};
+            if (allPdfDocuments && allPdfDocuments.length > 0) {
+                allPdfDocuments.forEach((doc, idx) => {
+                    if (uploadedPdfNames[idx]) {
+                        userOrientations[uploadedPdfNames[idx]] = doc.rotation || 0;
+                    }
+                });
+            }
         const sessionData = {
             allTracks: JSON.parse(JSON.stringify(allTracks)),
             cableTracks: JSON.parse(JSON.stringify(cableTracks)),
@@ -2995,8 +3208,10 @@
             scalingDone,
             trackDone,
             cableDone,
+            distanceScale: scalingDone ? distanceScale : null,
             zoom,
-            fileName: fileNameDisplay.textContent || "Unbekannt"
+            fileNames: [...uploadedPdfNames],
+            userOrientations
         };
         console.log("Session gespeichert:", sessionData);
         localStorage.setItem('t1000_session', JSON.stringify(sessionData));
@@ -3005,6 +3220,7 @@
     document.getElementById('saveSessionBtn').addEventListener('click', saveSessionToLocal);
     document.getElementById('clearSessionBtn').addEventListener('click', () => {
         localStorage.removeItem('t1000_session');
+        uploadedPdfNames = [];
         location.reload();
     });
 
@@ -3012,6 +3228,7 @@
         const data = localStorage.getItem('t1000_session');
         if (data) {
             const sessionData = JSON.parse(data);
+            const userOrientations = sessionData.userOrientations || {};
             allTracks = sessionData.allTracks || [[]];
             cableTracks = sessionData.cableTracks || [[]];
             trackNames = sessionData.trackNames || ["Strecke 1"];
@@ -3020,15 +3237,27 @@
             equationsPerCable = sessionData.equationsPerCable || [{}];
             activeTrackIndex = Math.max(0, Math.min(sessionData.activeTrackIndex || 0, allTracks.length - 1));
             activeCableIndex = Math.max(0, Math.min(sessionData.activeCableIndex || 0, cableTracks.length - 1));
+            userRotation = sessionData.userOrientation || 0;
             scalingDone = !!sessionData.scalingDone;
             trackDone = !!sessionData.trackDone;
             cableDone = !!sessionData.cableDone;
             pdfLoaded = false;
             zoom = sessionData.zoom || 1;
+            if (sessionData.userOrientation !== null && sessionData.userOrientation !== undefined) {
+                userRotation = sessionData.userOrientation;
+                orientationConfirmed = true;
+            } else {
+                orientationConfirmed = false;
+            }
+            if (typeof sessionData.distanceScale === "number") {
+                distanceScale = sessionData.distanceScale;
+                document.getElementById('scaleValue').textContent = distanceScale.toFixed(4);
+                scalingDone = true;
+            }
+            uploadedPdfNames = [];
             // Zeige den Dateinamen an
-            if (sessionData.fileName) {
-                fileNameDisplay.textContent = sessionData.fileName;
-                document.getElementById('file-name-sidebar').textContent = sessionData.fileName;
+            if (sessionData.fileNames && Array.isArray(sessionData.fileNames)) {
+                fileNameDisplay.innerHTML = sessionData.fileNames.map(name => `<div>${name}</div>`).join('');
             }
             updateTrackAndCableDropdowns();
             document.getElementById('trackSelect').selectedIndex = activeTrackIndex;
@@ -3037,6 +3266,8 @@
             syncNameInputs();
             console.log("Session geladen:", scalingDone, trackDone, cableDone);
             updateMainPageUI();
+            window.sessionUserOrientations = userOrientations;
+            showPdfUploadModal(sessionData.fileNames, getCurrentlyUploadedPdfNames());
         }
     }
 
